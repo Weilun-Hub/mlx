@@ -52,6 +52,16 @@ array scaled_dot_product_attention(
     const std::vector<array>& mask_arrs = {},
     StreamOrDevice s = {});
 
+/** Computes: O = softmax(Q @ K.T) @ V **/
+array infllmv2_attention_stage1(
+    const array& queries,
+    const array& keys,
+    const array& values,
+    const float scale,
+    const std::string& mask_mode = "",
+    const std::vector<array>& mask_arrs = {},
+    StreamOrDevice s = {});
+
 std::tuple<array, array, array> affine_quantize(
     const array& w,
     int group_size = 64,

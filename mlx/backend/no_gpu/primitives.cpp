@@ -34,6 +34,17 @@ bool fast::ScaledDotProductAttention::use_fallback(
   return true;
 }
 
+bool fast::InfLLMV2AttentionStage1::use_fallback(
+    const array& q,
+    const array& k,
+    const array& v,
+    bool has_mask,
+    bool has_arr_mask,
+    bool do_causal,
+    Stream s) {
+  return true;
+}
+
 NO_GPU(Abs)
 NO_GPU(Add)
 NO_GPU(AddMM)
@@ -154,6 +165,7 @@ NO_GPU_USE_FALLBACK(RMSNorm)
 NO_GPU_MULTI(RMSNormVJP)
 NO_GPU_USE_FALLBACK(RoPE)
 NO_GPU(ScaledDotProductAttention)
+NO_GPU(InfLLMV2AttentionStage1)
 NO_GPU_MULTI(AffineQuantize)
 NO_GPU_MULTI(CustomKernel)
 } // namespace fast

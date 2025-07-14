@@ -74,7 +74,7 @@ template <
     int WN, // 1
     typename MaskType = float,
     typename AccumType = float>
-[[kernel, max_total_threads_per_threadgroup(WM * WN * 32)]] void attention(
+[[kernel, max_total_threads_per_threadgroup(WM * WN * 32)]] void infllmv2_attention_stage1(
     const device T* Q [[buffer(0)]],
     const device T* K [[buffer(1)]],
     const device T* V [[buffer(2)]],
@@ -91,22 +91,23 @@ template <
   (void)lid;
 
   // Move to correct block
-  ulong3 tidl{tid.x, tid.y, tid.z};
+  ulong3 tidl{tid.x, tid.y, tid.z}; // #tile_q_len, #head, #batch
 
   Q += tidl.z * params->Q_strides[0] + // Batch
       tidl.y * params->Q_strides[1] + // Head
       tidl.x * BQ * params->Q_strides[2]; // Sequence
 
-  ulong kv_head_idx = int(tid.y) / params->gqa_factor;
+  ulong kv_head_idx = int(tid.y) / params->gqa_factor; // 32 / 2 = 16
   K += tidl.z * params->K_strides[0] + // Batch
       kv_head_idx * params->K_strides[1]; // Head
 
   V += tidl.z * params->V_strides[0] + // Batch
       kv_head_idx * params->V_strides[1]; // Head
 
+  // batch_size: 1 * kv_head_dim: 2 * q_len: 2048 * kv_len: 128
   O += tidl.z * params->O_strides[0] + // Batch
-      tidl.y * params->O_strides[1] + // Head
-      tidl.x * BQ * params->O_strides[2]; // Sequence
+      kv_head_idx * params->O_strides[1] + // Head
+      tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
 
   if (has_mask) {
     mask += tidl.z * mask_params->M_strides[0] + // Batch
@@ -114,20 +115,21 @@ template <
   }
 
   // Prepare threadgroup memory
-  constexpr short padQ = 16 / sizeof(T);
-  constexpr short padK = 16 / sizeof(T);
-  constexpr short padV = 16 / sizeof(T);
+  constexpr short padQ = 16 / sizeof(T); // 16 / 2 = 8
+  constexpr short padK = 16 / sizeof(T); // 16 / 2 = 8
+  constexpr short padV = 16 / sizeof(T); // 16 / 2 = 8
 
-  constexpr short LDQ_tgp = BD + padQ;
-  constexpr short LDK_tgp = BK + padK;
-  constexpr short LDV_tgp = BD + padV;
+  constexpr short LDQ_tgp = BD + padQ; // 128 + 8 = 136
+  constexpr short LDK_tgp = BK + padK; // 16 + 8 = 24
+  constexpr short LDV_tgp = BD + padV; // 128 + 8 = 136
 
-  constexpr short tgp_mem_0 = (BK + padK) * (BD);
-  constexpr short tgp_mem_1 = BK * (BD + padV);
-  constexpr short tgp_mem_s = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1;
+  constexpr short tgp_mem_0 = (BK + padK) * (BD); // (16 + 8) * 128 = 3072
+  constexpr short tgp_mem_1 = BK * (BD + padV); // 16 * (128 + 8) = 2176
+  constexpr short tgp_mem_s = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1; // 3072
+  // 16 * 128 : each k iter process 16 k_len, headdim = 128
 
-  threadgroup T Q_smem[BQ * (BD + padQ)];
-  threadgroup T KV_smem[tgp_mem_s];
+  threadgroup T Q_smem[BQ * (BD + padQ)]; // smem: each thread process q_len of 32 * head_dim of 128
+  threadgroup T KV_smem[tgp_mem_s]; // smem: each thread process k_len of 16 * head_dim of 128
 
   threadgroup T* Qs = Q_smem;
   threadgroup T* Ks = KV_smem;
@@ -173,9 +175,9 @@ template <
 
   // Prepare MMA tiles
   constexpr short kFragSize = 8; // MMAFrag size
-  using MMAFrag_acc_t = BaseMMAFrag<AccumType, kFragSize, kFragSize>;
+  using MMAFrag_acc_t = BaseMMAFrag<AccumType, kFragSize, kFragSize>; // 8 * 8
 
-  constexpr int kNWarps = WM * WN;
+  constexpr int kNWarps = WM * WN; // 4 * 1 = 4
   static_assert(
       BQ >= (kNWarps * kFragSize) && BQ % (kNWarps * kFragSize) == 0,
       "Each simdgroup must host atleast 1 simdgroup matrix along Q sequence.");
@@ -189,11 +191,11 @@ template <
 
   static_assert(TQ == 1, "Check TQ");
 
-  MMATile<AccumType, TQ, 1, MMAFrag_acc_t> Qtile;
-  MMATile<AccumType, 1, TK, MMAFrag_acc_t> Ktile;
-  MMATile<AccumType, TQ, TK, MMAFrag_acc_t> Stile;
-  MMATile<AccumType, 1, 1, MMAFrag_acc_t> Vtile;
-  MMATile<AccumType, TQ, TD, MMAFrag_acc_t> Otile;
+  MMATile<AccumType, TQ, 1, MMAFrag_acc_t> Qtile; // 1 * 1
+  MMATile<AccumType, 1, TK, MMAFrag_acc_t> Ktile; // 1 * 2
+  MMATile<AccumType, TQ, TK, MMAFrag_acc_t> Stile; // 1 * 2
+  MMATile<AccumType, 1, 1, MMAFrag_acc_t> Vtile; // 1 * 1
+  MMATile<AccumType, TQ, TK, MMAFrag_acc_t> Otile; // same as Stile
 
   Otile.clear();
 
@@ -221,11 +223,9 @@ template <
   loader_q.apply_inplace_op(ts);
 
   // Init row reduction variables
-  constexpr short kRowsPT = decltype(Stile)::kRowsPerThread;
-  // if (simd_lane_id == 0 && simd_group_id == 0) {
-  //   printf("[DEBUG ZWL] kRowsPT: %d\n", kRowsPT);
-  // }
-  static_assert(kRowsPT == 1, "Expected kRowsPT to be 1");
+  constexpr short kRowsPT = decltype(Stile)::kRowsPerThread; // 1 row per thread, 1 warp process 32 rows
+
+  static_assert(kRowsPT == 1, "Check kRowsPT");
 
   AccumType max_score[kRowsPT];
   AccumType sum_score[kRowsPT] = {0};
@@ -236,7 +236,7 @@ template <
     max_score[i] = Limits<AccumType>::finite_min;
   }
 
-  int kb_lim = params->NK;
+  int kb_lim = params->NK; // 8 iters over k
 
   if (do_causal) {
     int q_max = (tid.x + 1) * BQ + params->qL_off;
@@ -245,7 +245,7 @@ template <
   }
 
   // Loop over KV seq length
-  for (int kb = 0; kb < kb_lim; kb++) {
+  for (int kb = 0; kb < kb_lim; kb++) { // 0, 1, 2, 3, 4, 5, 6, 7
     // Load K block and apply scale
     threadgroup_barrier(mem_flags::mem_threadgroup);
     if (!align_K && kb == (params->NK_aligned)) {
@@ -362,13 +362,15 @@ template <
     }
 
     threadgroup_barrier(mem_flags::mem_threadgroup);
-
+    
+    /*
     // Load V blocks
     if (!align_K && kb == (params->NK_aligned)) {
       loader_v.load_safe(short2(BD, params->kL_rem));
     } else {
       loader_v.load_unsafe();
     }
+    */
 
     // Do softmax
 
@@ -408,6 +410,7 @@ template <
       sum_score[i] = sum_score[i] * factor[i] + sum_score_tmp[i];
     }
 
+    /*
     // Update O
     Otile.template row_bin_op<MulOp>(factor);
 
@@ -442,6 +445,7 @@ template <
         }
       }
     }
+    */
 
     // Prepare for next iteration
     loader_k.next();

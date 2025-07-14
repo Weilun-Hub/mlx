@@ -8,6 +8,8 @@
 #include "mlx/transforms.h"
 #include "mlx/transforms_impl.h"
 
+// #include <iostream>
+
 namespace mlx::core {
 
 array::array(const std::complex<float>& val, Dtype dtype /* = complex64 */)
@@ -127,6 +129,7 @@ void array::wait() {
 
 void array::eval() {
   // Ensure the array is ready to be read
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " array::eval" << std::endl;
   if (status() == Status::unscheduled) {
     mlx::core::eval({*this});
   } else {
@@ -218,6 +221,7 @@ array::~array() {
 }
 
 void array::ArrayDesc::init() {
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " ArrayDesc::init" << std::endl;
   strides.resize(shape.size());
   size = 1;
   for (int i = shape.size() - 1; i >= 0; --i) {
@@ -225,6 +229,7 @@ void array::ArrayDesc::init() {
     size *= shape[i];
   }
   for (const auto& in : inputs) {
+    // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " in.is_tracer(): " << in.is_tracer() << std::endl;
     is_tracer |= in.is_tracer();
   }
 }
@@ -244,6 +249,7 @@ array::ArrayDesc::ArrayDesc(
       status(Status::unscheduled),
       primitive(std::move(primitive)),
       inputs(std::move(inputs)) {
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " ArrayDesc constructor" << std::endl;
   init();
 }
 

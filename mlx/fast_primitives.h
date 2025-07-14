@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "mlx/primitives.h"
+#include <iostream>
 
 namespace mlx::core::fast {
 
@@ -234,6 +235,49 @@ class ScaledDotProductAttention : public Custom {
   bool is_equivalent(const Primitive& other) const override;
 
   DEFINE_PRINT(ScaledDotProductAttention);
+  DEFINE_INPUT_OUTPUT_SHAPE()
+  auto state() const {
+    return std::make_tuple(nullptr, scale_, do_causal_);
+  }
+
+ private:
+  float scale_;
+  bool do_causal_;
+};
+
+class InfLLMV2AttentionStage1 : public Custom {
+ public:
+  explicit InfLLMV2AttentionStage1(
+      Stream stream,
+      std::function<std::vector<array>(std::vector<array>)> fallback,
+      const float scale,
+      const bool do_causal)
+      : Custom(stream, fallback), scale_(scale), do_causal_(do_causal) {}
+
+  static bool use_fallback(
+      const array& q,
+      const array& k,
+      const array& v,
+      bool has_mask,
+      bool has_arr_mask,
+      bool do_causal,
+      Stream s);
+
+  void eval_cpu(const std::vector<array>& inputs, std::vector<array>& outputs)
+      override {
+    throw std::runtime_error("NYI");
+  }
+
+  void eval_gpu(const std::vector<array>& inputs, std::vector<array>& outputs)
+      override {
+    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage1::eval_gpu" << std::endl;
+    eval_gpu(inputs, outputs[0]);
+  }
+
+  void eval_gpu(const std::vector<array>& inputs, array& out);
+  bool is_equivalent(const Primitive& other) const override;
+
+  DEFINE_PRINT(InfLLMV2AttentionStage1);
   DEFINE_INPUT_OUTPUT_SHAPE()
   auto state() const {
     return std::make_tuple(nullptr, scale_, do_causal_);

@@ -53,6 +53,17 @@ bool fast::ScaledDotProductAttention::use_fallback(
   return true;
 }
 
+bool fast::InfLLMV2AttentionStage1::use_fallback(
+    const array& q,
+    const array& k,
+    const array& v,
+    bool has_mask,
+    bool has_arr_mask,
+    bool do_causal,
+    Stream s) {
+  return true;
+}
+
 #define NO_GPU_MULTI(func)                                             \
   void func::eval_gpu(                                                 \
       const std::vector<array>& inputs, std::vector<array>& outputs) { \
@@ -91,6 +102,7 @@ NO_GPU_MULTI(Eigh)
 
 namespace fast {
 NO_GPU(ScaledDotProductAttention)
+NO_GPU(InfLLMV2AttentionStage1)
 NO_GPU_MULTI(AffineQuantize)
 NO_GPU_MULTI(CustomKernel)
 } // namespace fast

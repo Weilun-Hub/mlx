@@ -90,9 +90,11 @@ set(STEEL_ATTN_HEADERS
     steel/attn/mma.h
     steel/attn/params.h
     steel/attn/transforms.h
-    steel/attn/kernels/steel_attention.h)
+    steel/attn/kernels/steel_attention.h
+    steel/attn/kernels/infllmv2_attn_stage1.h)
 
 build_kernel(steel/attn/kernels/steel_attention ${STEEL_ATTN_HEADERS})
+build_kernel(steel/attn/kernels/infllmv2_attn_stage1 ${STEEL_ATTN_HEADERS})
 
 if(NOT MLX_METAL_JIT)
   build_kernel(arange arange.h)

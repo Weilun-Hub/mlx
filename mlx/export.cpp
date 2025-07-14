@@ -341,7 +341,8 @@ struct PrimitiveFactory {
       SERIALIZE_PRIMITIVE(LayerNorm),
       SERIALIZE_PRIMITIVE(LayerNormVJP),
       SERIALIZE_PRIMITIVE(RoPE),
-      SERIALIZE_PRIMITIVE(ScaledDotProductAttention)};
+      SERIALIZE_PRIMITIVE(ScaledDotProductAttention),
+      SERIALIZE_PRIMITIVE(InfLLMV2AttentionStage1)};
   std::unordered_map<std::string, std::string> name_remap;
 
   PrimitiveFactory() {
