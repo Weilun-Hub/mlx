@@ -82,8 +82,8 @@ template <
     const constant AttnParams* params [[buffer(4)]],
     const constant AttnMaskParams* mask_params [[buffer(5), function_constant(has_mask)]],
     const device MaskType* mask [[buffer(6), function_constant(has_mask)]],
-    uint simd_lane_id [[thread_index_in_simdgroup]],
-    uint simd_group_id [[simdgroup_index_in_threadgroup]],
+    uint simd_lane_id [[thread_index_in_simdgroup]], // 0, 1, 2, ..., 31
+    uint simd_group_id [[simdgroup_index_in_threadgroup]], // 0, 1, 2, 3
     uint3 tid [[threadgroup_position_in_grid]],
     uint3 lid [[thread_position_in_threadgroup]]) { // clang-format on
 
@@ -105,8 +105,12 @@ template <
       kv_head_idx * params->V_strides[1]; // Head
 
   // batch_size: 1 * kv_head_dim: 2 * q_len: 2048 * kv_len: 128
+  // O += tidl.z * params->O_strides[0] + // Batch
+  //     tidl.y * params->O_strides[1] + // Head
+  //     tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
+
   O += tidl.z * params->O_strides[0] + // Batch
-      kv_head_idx * params->O_strides[1] + // Head
+      tidl.y * params->O_strides[1] + // Head
       tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
 
   if (has_mask) {
@@ -132,7 +136,7 @@ template <
   threadgroup T KV_smem[tgp_mem_s]; // smem: each thread process k_len of 16 * head_dim of 128
 
   threadgroup T* Qs = Q_smem;
-  threadgroup T* Ks = KV_smem;
+  threadgroup T* Ks = KV_smem; // kv share same smem, k first loaded, then v
   threadgroup T* Vs = KV_smem;
 
   // Prepare block loaders
@@ -183,11 +187,11 @@ template <
       "Each simdgroup must host atleast 1 simdgroup matrix along Q sequence.");
 
   // Q seq frags per warp
-  constexpr int TQ = BQ / (kNWarps * kFragSize); // 32 / (4 * 8) = 1
+  constexpr int TQ = BQ / (kNWarps * kFragSize); // 32 / (4 * 8) = 1, each warp process q_len = 1 * 128
   // KV sequence frags (all warps load the same frags)
-  constexpr int TK = BK / kFragSize; // 16 / 8 = 2
+  constexpr int TK = BK / kFragSize; // 16 / 8 = 2, each warp process k_len = 2
   // HeadDim frags (all warps load the same frags)
-  constexpr int TD = BD / kFragSize; // 128 / 8 = 32
+  constexpr int TD = BD / kFragSize; // 128 / 8 = 16, each warp process head_dim = 16
 
   static_assert(TQ == 1, "Check TQ");
 
@@ -203,14 +207,15 @@ template <
   const short2 simd_coord = MMAFrag_acc_t::get_coord(simd_lane_id);
   const short sm = simd_coord.y;
   const short sn = simd_coord.x;
-  const short tm = kFragSize * TQ * simd_group_id;
+  const short tm = kFragSize * TQ * simd_group_id; // 8 * 1 * (0, 1, 2, 3) = 0, 8, 16, 24
 
-  const short Qs_offset = (tm + sm) * LDQ_tgp + sn;
-  const short Ks_offset = sm * LDK_tgp + sn;
-  const short Vs_offset = sm * LDV_tgp + sn;
+  // in ONE simdgroup (8 x 8)
+  const short Qs_offset = (tm + sm) * LDQ_tgp + sn; // LDQ_tgp = BD + padQ = 128 + 8 = 136
+  const short Ks_offset = sm * LDK_tgp + sn; // LDK_tgp = BK + padK = 16 + 8 = 24
+  const short Vs_offset = sm * LDV_tgp + sn; // LDV_tgp = BD + padV = 128 + 8 = 136
 
-  constexpr short Qs_tile_stride = kFragSize;
-  constexpr short Ks_tile_stride = kFragSize * LDK_tgp;
+  constexpr short Qs_tile_stride = kFragSize; // 8
+  constexpr short Ks_tile_stride = kFragSize * LDK_tgp; // 8 * (16 + 8) = 192
 
   threadgroup_barrier(mem_flags::mem_threadgroup);
 
@@ -260,7 +265,7 @@ template <
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
     STEEL_PRAGMA_UNROLL
-    for (short dd = 0; dd < TD; dd++) {
+    for (short dd = 0; dd < TD; dd++) { // loop over head dim dimension 0, 1, 2, ..., 15. TD = 16
       simdgroup_barrier(mem_flags::mem_none);
 
       Qtile.template load<T, 1, 1, LDQ_tgp, 1>(
@@ -271,7 +276,7 @@ template <
       simdgroup_barrier(mem_flags::mem_none);
 
       tile_matmad(Stile, Qtile, Ktile, Stile);
-    }
+    } 
 
     // Mask out length sequence
     if (!align_K && kb == (params->NK_aligned)) {
@@ -410,6 +415,10 @@ template <
       sum_score[i] = sum_score[i] * factor[i] + sum_score_tmp[i];
     }
 
+    Stile.template row_bin_op<MulOp>(factor);
+    // Stile.template row_bin_op<DivOp>(sum_score);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
     /*
     // Update O
     Otile.template row_bin_op<MulOp>(factor);
@@ -453,11 +462,14 @@ template <
   }
 
   // Normalize output
-  Otile.template row_bin_op<DivOp>(sum_score);
+  // Stile.template row_bin_op<DivOp>(sum_score);
   threadgroup_barrier(mem_flags::mem_none);
 
   // Store results
-  O += (tm + sm) * params->O_strides[2] + sn;
+  // O += (tm + sm) * params->O_strides[2] + sn;
+  O += (tm + sm) * params->O_strides[2] + sm;
+
+  // assert((!align_Q && int(tid.x) == (params->NQ_aligned)));
 
   if (!align_Q && int(tid.x) == (params->NQ_aligned)) {
     auto dst_tile_dims = short2(BD - sn, params->qL_rem - (tm + sm));
@@ -465,8 +477,8 @@ template <
     if (dst_tile_dims.x <= 0 || dst_tile_dims.y <= 0)
       return;
 
-    Otile.template store_safe<T, 1, 1>(O, params->O_strides[2], dst_tile_dims);
+    Stile.template store_safe<T, 1, 1>(O, params->O_strides[2], dst_tile_dims);
   } else {
-    Otile.template store<T, 1, 1>(O, params->O_strides[2]);
+    Stile.template store<T, 1, 1>(O, params->O_strides[2]);
   }
 }
