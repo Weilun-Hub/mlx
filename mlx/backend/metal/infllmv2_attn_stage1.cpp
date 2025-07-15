@@ -163,7 +163,7 @@ void infllmv2_attention_stage1_metal(
   printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", NQ, H, B);
   printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", 32, wm, wn);
   
-  // compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
+  compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
 }
 
 } // namespace

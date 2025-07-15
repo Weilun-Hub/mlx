@@ -95,19 +95,13 @@ template <
 
   Q += tidl.z * params->Q_strides[0] + // Batch
       tidl.y * params->Q_strides[1] + // Head
-      tidl.x * BQ * params->Q_strides[2]; // Sequence
+      tidl.x * BQ * params->Q_strides[2]; // Sequence. move to q this block prepared to process, 
 
   ulong kv_head_idx = int(tid.y) / params->gqa_factor; // 32 / 2 = 16
   K += tidl.z * params->K_strides[0] + // Batch
-      kv_head_idx * params->K_strides[1]; // Head
-
-  V += tidl.z * params->V_strides[0] + // Batch
-      kv_head_idx * params->V_strides[1]; // Head
-
-  // batch_size: 1 * kv_head_dim: 2 * q_len: 2048 * kv_len: 128
-  // O += tidl.z * params->O_strides[0] + // Batch
-  //     tidl.y * params->O_strides[1] + // Head
-  //     tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
+      kv_head_idx * params->K_strides[1]; // Head. 
+  // move to k this block prepared to process, 
+  // since in a block, q attends to all k, so only need to move to start position of k w.r.t seq len
 
   O += tidl.z * params->O_strides[0] + // Batch
       tidl.y * params->O_strides[1] + // Head
@@ -130,21 +124,20 @@ template <
   constexpr short tgp_mem_0 = (BK + padK) * (BD); // (16 + 8) * 128 = 3072
   constexpr short tgp_mem_1 = BK * (BD + padV); // 16 * (128 + 8) = 2176
   constexpr short tgp_mem_s = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1; // 3072
-  // 16 * 128 : each k iter process 16 k_len, headdim = 128
 
   threadgroup T Q_smem[BQ * (BD + padQ)]; // smem: each thread process q_len of 32 * head_dim of 128
   threadgroup T KV_smem[tgp_mem_s]; // smem: each thread process k_len of 16 * head_dim of 128
 
   threadgroup T* Qs = Q_smem;
   threadgroup T* Ks = KV_smem; // kv share same smem, k first loaded, then v
-  threadgroup T* Vs = KV_smem;
+  threadgroup T* Ss = Q_smem;
 
   // Prepare block loaders
   using QBlockLoader = BlockLoaderT<
       /* typename T = */ T,
-      /* short BROWS = */ BQ,
-      /* short BCOLS = */ BD,
-      /* short kDstStrRow = */ LDQ_tgp,
+      /* short BROWS = */ BQ, // 32
+      /* short BCOLS = */ BD, // 128
+      /* short kDstStrRow = */ LDQ_tgp, // 128 + 8 = 136
       /* short kDstStrCol = */ 1,
       /* short reduction_dim = */ 1,
       /* short tgp_size = */ WM * WN * 32>;
@@ -159,21 +152,21 @@ template <
       /* short reduction_dim = */ 0,
       /* short tgp_size = */ WM * WN * 32>;
 
-  using VBlockLoader = BlockLoaderT<
+  using SBlockLoader = BlockLoaderT<
       /* typename T = */ T,
-      /* short BROWS = */ BK,
-      /* short BCOLS = */ BD,
-      /* short kDstStrRow = */ LDV_tgp,
+      /* short BROWS = */ BQ,
+      /* short BCOLS = */ BK,
+      /* short kDstStrRow = */ LDK_tgp,
       /* short kDstStrCol = */ 1,
-      /* short reduction_dim = */ 0,
+      /* short reduction_dim = */ 1,
       /* short tgp_size = */ WM * WN * 32>;
 
   QBlockLoader loader_q(
       Q, params->Q_strides[2], Qs, simd_group_id, simd_lane_id);
   KBlockLoader loader_k(
       K, params->K_strides[2], Ks, simd_group_id, simd_lane_id);
-  VBlockLoader loader_v(
-      V, params->V_strides[2], Vs, simd_group_id, simd_lane_id);
+  SBlockLoader loader_s(
+      O, params->O_strides[2], Ss, simd_group_id, simd_lane_id);
 
   TransformScale<T> ts(static_cast<T>(params->scale * 1.44269504089));
 
@@ -187,18 +180,17 @@ template <
       "Each simdgroup must host atleast 1 simdgroup matrix along Q sequence.");
 
   // Q seq frags per warp
-  constexpr int TQ = BQ / (kNWarps * kFragSize); // 32 / (4 * 8) = 1, each warp process q_len = 1 * 128
+  constexpr int TQ = BQ / (kNWarps * kFragSize); // 32 / (4 * 8) = 1
   // KV sequence frags (all warps load the same frags)
-  constexpr int TK = BK / kFragSize; // 16 / 8 = 2, each warp process k_len = 2
+  constexpr int TK = BK / kFragSize; // 16 / 8 = 2
   // HeadDim frags (all warps load the same frags)
-  constexpr int TD = BD / kFragSize; // 128 / 8 = 16, each warp process head_dim = 16
+  constexpr int TD = BD / kFragSize; // 128 / 8 = 16
 
   static_assert(TQ == 1, "Check TQ");
 
   MMATile<AccumType, TQ, 1, MMAFrag_acc_t> Qtile; // 1 * 1
   MMATile<AccumType, 1, TK, MMAFrag_acc_t> Ktile; // 1 * 2
   MMATile<AccumType, TQ, TK, MMAFrag_acc_t> Stile; // 1 * 2
-  MMATile<AccumType, 1, 1, MMAFrag_acc_t> Vtile; // 1 * 1
   MMATile<AccumType, TQ, TK, MMAFrag_acc_t> Otile; // same as Stile
 
   Otile.clear();
@@ -213,6 +205,7 @@ template <
   const short Qs_offset = (tm + sm) * LDQ_tgp + sn; // LDQ_tgp = BD + padQ = 128 + 8 = 136
   const short Ks_offset = sm * LDK_tgp + sn; // LDK_tgp = BK + padK = 16 + 8 = 24
   const short Vs_offset = sm * LDV_tgp + sn; // LDV_tgp = BD + padV = 128 + 8 = 136
+  const short Ss_offset = (tm + sm) * LDK_tgp + sn; // LDK_tgp = BK + padK = 16 + 8 = 24
 
   constexpr short Qs_tile_stride = kFragSize; // 8
   constexpr short Ks_tile_stride = kFragSize * LDK_tgp; // 8 * (16 + 8) = 192
@@ -249,6 +242,8 @@ template <
     kb_lim = min(params->NK, kb_lim);
   }
 
+  O += (tm + sm) * params->O_strides[2] + sn;
+
   // Loop over KV seq length
   for (int kb = 0; kb < kb_lim; kb++) { // 0, 1, 2, 3, 4, 5, 6, 7
     // Load K block and apply scale
@@ -276,7 +271,7 @@ template <
       simdgroup_barrier(mem_flags::mem_none);
 
       tile_matmad(Stile, Qtile, Ktile, Stile);
-    } 
+    } // finish warp level operation
 
     // Mask out length sequence
     if (!align_K && kb == (params->NK_aligned)) {
@@ -367,20 +362,13 @@ template <
     }
 
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    
-    /*
-    // Load V blocks
-    if (!align_K && kb == (params->NK_aligned)) {
-      loader_v.load_safe(short2(BD, params->kL_rem));
-    } else {
-      loader_v.load_unsafe();
-    }
-    */
 
+    Stile.template store<T, 1, 1>(O + kb * BK, params->O_strides[2]);
+    
     // Do softmax
 
     // Temp variables
-    AccumType new_max[kRowsPT];
+    AccumType new_max[kRowsPT]; // each thread handles one row
     AccumType factor[kRowsPT];
     STEEL_PRAGMA_UNROLL
     for (short i = 0; i < kRowsPT; ++i) {
@@ -399,12 +387,6 @@ template <
       factor[i] = fast::exp2(max_score[i] - new_max[i]);
     }
 
-    // Save max for next iteration
-    STEEL_PRAGMA_UNROLL
-    for (short i = 0; i < kRowsPT; ++i) {
-      max_score[i] = new_max[i];
-    }
-
     // Row Sum
     AccumType sum_score_tmp[kRowsPT] = {0};
     Stile.template row_reduce<SumOp>(sum_score_tmp);
@@ -415,70 +397,29 @@ template <
       sum_score[i] = sum_score[i] * factor[i] + sum_score_tmp[i];
     }
 
-    Stile.template row_bin_op<MulOp>(factor);
-    // Stile.template row_bin_op<DivOp>(sum_score);
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-
-    /*
-    // Update O
-    Otile.template row_bin_op<MulOp>(factor);
-
-    // Load V into registers
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-
     STEEL_PRAGMA_UNROLL
-    for (short iq = 0; iq < TQ; iq++) {
-      STEEL_PRAGMA_UNROLL
-      for (short id = 0; id < TD; id++) {
-        STEEL_PRAGMA_UNROLL
-        for (short ik = 0; ik < TK; ik++) {
-          if constexpr (BD == 128) {
-            simdgroup_barrier(mem_flags::mem_none);
-          }
-
-          const short kk = ik * kFragSize;
-          const short dd = id * kFragSize;
-
-          Vtile.template load<T, 1, 1, LDV_tgp, 1>(
-              &Vs[Vs_offset + kk * LDV_tgp + dd]);
-
-          if constexpr (BD == 128) {
-            simdgroup_barrier(mem_flags::mem_none);
-          }
-
-          MMAFrag_acc_t::mma(
-              Otile.frag_at(iq, id),
-              Stile.frag_at(iq, ik),
-              Vtile.frag_at(0, 0),
-              Otile.frag_at(iq, id));
-        }
-      }
+    for (short i = 0; i < kRowsPT; ++i) {
+      max_score[i] = new_max[i];
     }
-    */
+
+    threadgroup_barrier(mem_flags::mem_threadgroup);
 
     // Prepare for next iteration
     loader_k.next();
-    loader_v.next();
   }
+  
+  for (int kb = 0; kb < kb_lim; kb++) {
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    loader_s.load_unsafe();
+    Stile.template load<T, 1, 1, LDK_tgp, 1>(&Ss[Ss_offset]);
 
-  // Normalize output
-  // Stile.template row_bin_op<DivOp>(sum_score);
-  threadgroup_barrier(mem_flags::mem_none);
+    Stile.template row_bin_op<ExpSubOp>(max_score);
+    Stile.template row_bin_op<DivOp>(sum_score);
 
-  // Store results
-  // O += (tm + sm) * params->O_strides[2] + sn;
-  O += (tm + sm) * params->O_strides[2] + sm;
+    simdgroup_barrier(mem_flags::mem_threadgroup);
+    Stile.template store<T, 1, 1>(O + kb * BK, params->O_strides[2]);
 
-  // assert((!align_Q && int(tid.x) == (params->NQ_aligned)));
-
-  if (!align_Q && int(tid.x) == (params->NQ_aligned)) {
-    auto dst_tile_dims = short2(BD - sn, params->qL_rem - (tm + sm));
-
-    if (dst_tile_dims.x <= 0 || dst_tile_dims.y <= 0)
-      return;
-
-    Stile.template store_safe<T, 1, 1>(O, params->O_strides[2], dst_tile_dims);
-  } else {
-    Stile.template store<T, 1, 1>(O, params->O_strides[2]);
+    simdgroup_barrier(mem_flags::mem_threadgroup);
+    loader_s.next();
   }
 }
