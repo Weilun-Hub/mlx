@@ -107,6 +107,10 @@ template <
       tidl.y * params->O_strides[1] + // Head
       tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
 
+  O_save += tidl.z * params->O_strides[0] + // Batch
+      tidl.y / 16 * params->O_strides[1] + // Head
+      tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
+
   if (has_mask) {
     mask += tidl.z * mask_params->M_strides[0] + // Batch
         tidl.y * mask_params->M_strides[1]; // Head
@@ -244,7 +248,7 @@ template <
 
   O += (tm + sm) * params->O_strides[2] + sn;
 
-  // Loop over KV seq length
+  // 1st Loop over KV seq length
   for (int kb = 0; kb < kb_lim; kb++) { // 0, 1, 2, 3, 4, 5, 6, 7
     // Load K block and apply scale
     threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -408,6 +412,7 @@ template <
     loader_k.next();
   }
   
+  // 2nd Loop over KV seq length
   for (int kb = 0; kb < kb_lim; kb++) {
     threadgroup_barrier(mem_flags::mem_threadgroup);
     loader_s.load_unsafe();
@@ -415,6 +420,17 @@ template <
 
     Stile.template row_bin_op<ExpSubOp>(max_score);
     Stile.template row_bin_op<DivOp>(sum_score);
+
+    Stile.template store<T, 1, 1, LDK_tgp, 1>(&Ss[Ss_offset]);
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (simd_group_id % 2 == 0) {
+      Ss[Ss_offset] += Ss[Ss_offset + kFragSize * TQ * LDK_tgp];
+      Ss[Ss_offset + 1] += Ss[Ss_offset + kFragSize * TQ * LDK_tgp + 1];
+      // threadgroup_barrier(mem_flags::mem_threadgroup);
+    }
+    Stile.template load<T, 1, 1, LDK_tgp, 1>(&Ss[Ss_offset]);
+    
+    Stile.template col_reduce<SumOp>();
 
     simdgroup_barrier(mem_flags::mem_threadgroup);
     Stile.template store<T, 1, 1>(O + kb * BK, params->O_strides[2]);

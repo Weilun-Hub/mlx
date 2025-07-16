@@ -59,12 +59,13 @@ void infllmv2_attention_stage1_metal(
 
   int B = q.shape(0);
   int H = q.shape(1);
-  int H_kv = k.shape(1);
   int D = q.shape(3);
   int gqa_factor = q.shape(1) / k.shape(1);
   printf("[DEBUG ZWL] B: %d, H: %d, D: %d, gqa_factor: %d\n", B, H, D, gqa_factor);
 
   int qL = q.shape(2);
+  // H /= gqa_factor;
+  // int qL = q.shape(2) * gqa_factor;
   int kL = k.shape(2);
   printf("[DEBUG ZWL] qL: %d, kL: %d\n", qL, kL);
 
@@ -137,6 +138,7 @@ void infllmv2_attention_stage1_metal(
       /* int qL_off = */ (kL - qL),
 
       /* int64_t Q_strides[3] = */ {q.strides(0), q.strides(1), q.strides(2)},
+      // /* int64_t Q_strides[3] = */ {q.strides(0) * gqa_factor, q.strides(1) / gqa_factor, q.strides(2)},
       /* int64_t K_strides[3] = */ {k.strides(0), k.strides(1), k.strides(2)},
       /* int64_t V_strides[3] = */ {v.strides(0), v.strides(1), v.strides(2)},
       /* int64_t O_strides[3] = */ {o.strides(0), o.strides(1), o.strides(2)}};
@@ -182,8 +184,6 @@ bool InfLLMV2AttentionStage1::use_fallback(
   if (s.device == Device::cpu) {
     return true;
   }
-
-  // printf("[DEBUG ZWL] InfLLMV2AttentionStage1::use_fallback\n");
 
   const int value_head_dim = v.shape(-1);
   const int query_head_dim = q.shape(-1);

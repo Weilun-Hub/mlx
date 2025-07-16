@@ -209,33 +209,15 @@ struct BaseMMAFrag<T, 8, 8> {
   }
 
   template <typename Op>
-  METAL_FUNC static constexpr void col_reduce(
-      thread const frag_type& inp_vals,
-      thread T* reduced_vals) {
-    
-    T thr_reduce_1 = inp_vals.x;
-    T thr_reduce_2 = inp_vals.y;
+  METAL_FUNC static constexpr void col_reduce(thread frag_type& inp_vals) {
+    inp_vals.x += simd_shuffle_xor(inp_vals.x, ushort(16));
+    inp_vals.y += simd_shuffle_xor(inp_vals.y, ushort(16));
 
-    T thr_reduce_1_x2 = simd_shuffle_xor(thr_reduce_1, ushort(2));
-    T thr_reduce_2_x2 = simd_shuffle_xor(thr_reduce_2, ushort(2));
-    
-    thr_reduce_1_x2 = Op::apply(thr_reduce_1_x2, thr_reduce_1);
-    thr_reduce_2_x2 = Op::apply(thr_reduce_2_x2, thr_reduce_2);
+    inp_vals.x += simd_shuffle_xor(inp_vals.x, ushort(4));
+    inp_vals.y += simd_shuffle_xor(inp_vals.y, ushort(4));
 
-    T thr_reduce_1_x16 = simd_shuffle_xor(thr_reduce_1_x2, ushort(16));
-    T thr_reduce_2_x16 = simd_shuffle_xor(thr_reduce_2_x2, ushort(16));
-
-    thr_reduce_1_x16 = Op::apply(thr_reduce_1_x16, thr_reduce_1_x2);
-    thr_reduce_2_x16 = Op::apply(thr_reduce_2_x16, thr_reduce_2_x2);
-
-    T thr_reduce_1_x4 = simd_shuffle_xor(thr_reduce_1_x16, ushort(4));
-    T thr_reduce_2_x4 = simd_shuffle_xor(thr_reduce_2_x16, ushort(4));
-
-    thr_reduce_1_x4 = Op::apply(thr_reduce_1_x4, thr_reduce_1_x16);
-    thr_reduce_2_x4 = Op::apply(thr_reduce_2_x4, thr_reduce_2_x16);
-
-    reduced_vals[0] = Op::apply(reduced_vals[0], thr_reduce_1_x4);
-    reduced_vals[1] = Op::apply(reduced_vals[1], thr_reduce_2_x4);
+    inp_vals.x += simd_shuffle_xor(inp_vals.x, ushort(2));
+    inp_vals.y += simd_shuffle_xor(inp_vals.y, ushort(2));
   }
 
   template <typename Op>
@@ -331,13 +313,12 @@ struct MMATile {
   }
 
   template <typename Op>
-  METAL_FUNC void col_reduce(thread T vals[kColsPerThread]) const {
+  METAL_FUNC void col_reduce() {
     STEEL_PRAGMA_UNROLL
     for (short i = 0; i < kTileRows; ++i) {
       STEEL_PRAGMA_UNROLL
       for (short j = 0; j < kTileCols; ++j) {
-        MMAFrag_t::template col_reduce<Op>(
-            frag_at(i, j), &vals[j * MMAFrag_t::kElemCols]);
+        MMAFrag_t::template col_reduce<Op>(frag_at(i, j));
       }
     }
   }
