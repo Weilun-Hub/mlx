@@ -265,8 +265,8 @@ void InfLLMV2AttentionStage1::eval_gpu(
   int64_t str_oD = 1;
   int64_t str_oH = o.shape(3); // 128
   int64_t str_oL = o.shape(1) * str_oH; // 2 * 128 = 256
-  int64_t str_oB = o.shape(2) * str_oL; // 2048 * 256 = 524288
-  size_t data_size = o.shape(0) * str_oB; // 1 * 524288 = 524288
+  int64_t str_oB = o.shape(2) * str_oL; // 2048 / 16 * 256 = 32768
+  size_t data_size = o.shape(0) * str_oB; // 1 * 32768 = 32768
   printf("[DEBUG ZWL] str_oD: %d, str_oH: %d, str_oL: %d, str_oB: %d, data_size: %zu\n", str_oD, str_oH, str_oL, str_oB, data_size);
 
   array::Flags flags{

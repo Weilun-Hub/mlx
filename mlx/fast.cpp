@@ -954,7 +954,7 @@ array infllmv2_attention_stage1(
           q, k, v, has_mask, has_arr_mask, do_causal, stream)) {
     std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage1::use_fallback false" << std::endl;
     // auto out_shape = Shape{q.shape(0), q.shape(1), q.shape(2), v.shape(-1)};
-    auto out_shape = Shape{q.shape(0), q.shape(1), q.shape(2), k.shape(2)};
+    auto out_shape = Shape{q.shape(0), q.shape(1), q.shape(2), k.shape(2)}; // batch, head, q_len, k_len
     return array(
         std::move(out_shape),
         final_type,

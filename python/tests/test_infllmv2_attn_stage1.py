@@ -31,7 +31,6 @@ def naive_infllmv2_attn_stage1_mlx(q, k, v, causal=False):
         exit()
     score = mx.softmax(score, axis=-1)
 
-    # score /= score.max(axis=-1, keepdims=True)
     # score = score.reshape(batch_size, n_kv_head, n_repeat, q_len, k_len)
     # score = score.sum(axis=2)
     
@@ -69,8 +68,12 @@ if __name__ == "__main__":
 
     score_mlx = naive_infllmv2_attn_stage1_mlx(q_mlx, k_mlx, v_mlx, causal=False)
     score_mlx_npy = np.array(score_mlx).squeeze(0)
-    score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
-    score_torch_npy = score_torch.numpy()
+    # print(score_mlx_npy.shape)
+    # score_mlx_npy = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
+    print(score_mlx_npy.shape)
+    # exit()
+    # score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
+    # score_torch_npy = score_torch.numpy()
 
     # diff = np.abs(score_mlx_npy - score_torch_npy)
     # print("max |diff| between mlx and torch: ", diff.max())
@@ -82,34 +85,31 @@ if __name__ == "__main__":
     print(f"o_mlx.min(): {o_mlx.min()}, o_mlx.max(): {o_mlx.max()}")
 
     o_mlx_npy = np.array(o_mlx).squeeze(0)
-    print("pred zero elements: ", (o_mlx_npy == 0).sum(), "out of ", o_mlx_npy.size, "=", (o_mlx_npy == 0).sum() / o_mlx_npy.size)
-    print("gt zero elements: ", (score_mlx_npy == 0).sum(), "out of ", score_mlx_npy.size, "=", (score_mlx_npy == 0).sum() / score_mlx_npy.size)
+    # print("pred zero elements: ", (o_mlx_npy == 0).sum(), "out of ", o_mlx_npy.size, "=", (o_mlx_npy == 0).sum() / o_mlx_npy.size)
+    # print("gt zero elements: ", (score_mlx_npy == 0).sum(), "out of ", score_mlx_npy.size, "=", (score_mlx_npy == 0).sum() / score_mlx_npy.size)
     
     diff = np.abs(o_mlx_npy - score_mlx_npy)
     print(f"max |diff| between mlx and torch: {diff.max()}")
 
-    # print("row (seq k) 0 ~ 4, col (head dim) 0")
-    # print(o_mlx_npy[0, : 4, 0])
-    # print(score_mlx_npy[0, : 4, 0])
+    # diff = np.abs(o_mlx_npy[:, :, :8] - score_mlx_npy[:, :, :8])
+    # print(f"max |diff|[:, :, :8] between mlx and torch: {diff.max()}")
+    # diff = np.abs(o_mlx_npy[:, :, 8:] - score_mlx_npy[:, :, 8:])
+    # print(f"max |diff|[:, :, 8:] between mlx and torch: {diff.max()}")
 
     head = 3
-    seq_q = 179
-    start, end = 0, 16
-    # start, end = 16, 32
-    print(f"head : {head}, seq q : {seq_q}, seq k : {start} ~ {end - 1}")
-    # print(o_mlx_npy[head, seq_q, start : end])
-    # print(score_mlx_npy[head, seq_q, start : end])
+    q_start, q_end = 0, 16
+    k_start, k_end = 0, 8
+    print("+------- pred ---------+")
+    for i in range(q_start, q_end):
+        print(o_mlx_npy[head, i, k_start : k_end])
 
-    for i in range(16):
-        print(f"pred : {o_mlx_npy[head, seq_q, i]:.6f}, gt : {score_mlx_npy[head, seq_q, i]:.6f}")
-
-    start, end = 16, 32
-    print(f"head : {head}, seq q : {seq_q}, seq k : {start} ~ {end - 1}")
-    # print(o_mlx_npy[head, seq_q, start : end])
-    # print(score_mlx_npy[head, seq_q, start : end])
-    for i in range(16):
-        print(f"pred : {o_mlx_npy[head, seq_q, i]:.6f}, gt : {score_mlx_npy[head, seq_q, i]:.6f}")
-
-    # print("row (seq k) 8 ~ 15, col (head dim) 0")
-    # print(o_mlx_npy[0, 8 : 15, 0])
-    # print(score_mlx_npy[0, 8 : 15, 0])
+    print("+------- gt ---------+")
+    # for i in range(q_start, q_end):
+    #     print(score_mlx_npy[head, i, k_start : k_end])
+    print("line 0 - 7")
+    print(score_mlx_npy[head, 0:8, k_start : k_end].sum(axis=-2))
+    print("line 8 - 15")
+    print(score_mlx_npy[head, 8:16, k_start : k_end].sum(axis=-2))
+    print("line 0 - 15")
+    print(score_mlx_npy[head, 0:16, k_start : k_end].sum(axis=-2))
+    
