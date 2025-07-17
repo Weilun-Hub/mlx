@@ -103,9 +103,13 @@ template <
   // move to k this block prepared to process, 
   // since in a block, q attends to all k, so only need to move to start position of k w.r.t seq len
 
+  // O += tidl.z * params->O_strides[0] + // Batch
+  //     tidl.y * params->O_strides[1] + // Head
+  //     tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
+
   O += tidl.z * params->O_strides[0] + // Batch
-      tidl.y * params->O_strides[1] + // Head
-      tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
+    tidl.y * params->O_strides[1] + // Head
+    tidl.x * 2 * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
 
   if (has_mask) {
     mask += tidl.z * mask_params->M_strides[0] + // Batch
@@ -403,7 +407,7 @@ template <
     loader_k.next();
   }
 
-  O += (tm + sm) * params->O_strides[2] + sn;
+  // O += (tm + sm) * params->O_strides[2] + sn;
 
   // 2nd Loop over KV seq length to do softmax
   for (int kb = 0; kb < kb_lim; kb++) {
@@ -526,26 +530,33 @@ template <
     Stile.template row_bin_op<ExpSubOp>(max_score);
     Stile.template row_bin_op<DivOp>(sum_score);
 
-    Stile.template store<T, 1, 1, LDQ_tgp, 1>(&Ss[Ss_offset]);
-    threadgroup_barrier(mem_flags::mem_threadgroup);
+    threadgroup_barrier(mem_flags::mem_none);
+    Stile.template store<T, 1, 1, BQ, 1>(&Ss[Ss_offset]);
+    threadgroup_barrier(mem_flags::mem_none);
+    
     if (simd_group_id % 2 == 0) {
-      Ss[Ss_offset]     += Ss[Ss_offset + kFragSize * TQ * LDK_tgp];
+      Ss[Ss_offset] += Ss[Ss_offset + kFragSize * LDK_tgp];
       Ss[Ss_offset + 1] += Ss[Ss_offset + kFragSize * TQ * LDK_tgp + 1];
-      threadgroup_barrier(mem_flags::mem_threadgroup);
+      Ss[Ss_offset + 8] += Ss[Ss_offset + kFragSize * TQ * LDK_tgp + 8];
+      Ss[Ss_offset + 8 + 1] += Ss[Ss_offset + kFragSize * TQ * LDK_tgp + 8 + 1];
     }
-    Stile.template load<T, 1, 1, LDQ_tgp, 1>(&Ss[Ss_offset]);
+    threadgroup_barrier(mem_flags::mem_none);
+    Stile.clear();
+    Stile.template load<T, 1, 1, BQ, 1>(&Ss[Ss_offset]);
+    threadgroup_barrier(mem_flags::mem_none);
     
     Stile.template col_reduce<SumOp>();
 
-    simdgroup_barrier(mem_flags::mem_threadgroup);
-    // if (simd_group_id == 0 && sm == 0) {
-    //   // Stile.template store<T, 1, 1>(O + (simd_group_id / 2) * params->O_strides[2] + kb * BK + sn, params->O_strides[2]);
-    //   Stile.template store<T, 1, 1>(O + kb * BK + sn, params->O_strides[2]);
-    // }
+    simdgroup_barrier(mem_flags::mem_none);
+    if ((simd_group_id % 2) == 0 && sm == 0) {
+      Stile.template store<T, 1, 1>(O + (simd_group_id / 2) * params->O_strides[2] + kb * BK + sn, params->O_strides[2]);
+      // Stile.template store<T, 1, 1>(O + kb * BK + sn, params->O_strides[2]);
+    }
 
-    Stile.template store<T, 1, 1>(O + kb * BK, params->O_strides[2]);
+    // Stile.template store<T, 1, 1>(O + kb * BK, params->O_strides[2]);
 
-    simdgroup_barrier(mem_flags::mem_threadgroup);
+    simdgroup_barrier(mem_flags::mem_none);
+
     loader_k2.next();
   }
 }

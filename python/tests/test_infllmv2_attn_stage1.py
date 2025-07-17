@@ -31,14 +31,14 @@ def naive_infllmv2_attn_stage1_mlx(q, k, v, causal=False):
     scale = float(1.0 / math.sqrt(head_dim))
 
     score = q @ k.transpose(0, 1, 3, 2) * scale
-    print(f"score.shape: {score.shape}")
+    # print(f"score.shape: {score.shape}")
     if causal:
         print("NYI")
         exit()
     score = mx.softmax(score, axis=-1)
 
-    # score = score.reshape(batch_size, n_kv_head, n_repeat, q_len, k_len)
-    # score = score.sum(axis=2)
+    score = score.reshape(batch_size, n_kv_head, n_repeat, q_len, k_len)
+    score = score.sum(axis=2)
     
     return score
 
@@ -55,7 +55,7 @@ def naive_infllmv2_attn_stage1_torch(q, k, v, causal=False):
                     causal_mask[i, j] = True
         attn = attn.masked_fill(~causal_mask, -float('inf'))
     score = F.softmax(attn, dim=-1)
-    # score = score.reshape(2, 16, q.shape[1], k.shape[1]).sum(dim=1)
+    score = score.reshape(2, 16, q.shape[1], k.shape[1]).sum(dim=1)
     return score
 
 
@@ -76,16 +76,17 @@ if __name__ == "__main__":
 
     score_mlx = naive_infllmv2_attn_stage1_mlx(q_mlx, k_mlx, v_mlx, causal=False)
     score_mlx_npy = np.array(score_mlx).squeeze(0)
-    # print(score_mlx_npy.shape)
+    print(score_mlx_npy.shape)
+    # exit()
     # score_mlx_npy = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
     # print(score_mlx_npy.shape)
     # exit()
-    # score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
-    # score_torch_npy = score_torch.numpy()
+    score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
+    score_torch_npy = score_torch.numpy()
 
-    # diff = np.abs(score_mlx_npy - score_torch)
-    # print("max |diff| between mlx and torch: ", diff.max())
-    # exit()
+    diff = np.abs(score_mlx_npy - score_torch_npy)
+    print("max |diff| between mlx and torch: ", diff.max())
+    exit()
 
     scale = float(1.0 / math.sqrt(HEAD_DIM))
 
@@ -109,9 +110,9 @@ if __name__ == "__main__":
     # diff = np.abs(o_mlx_npy[:, :, 8:] - score_mlx_npy[:, :, 8:])
     # print(f"max |diff|[:, :, 8:] between mlx and torch: {diff.max()}")
 
-    head = 3
-    q_start, q_end = 0, 16
-    k_start, k_end = 0, 16
+    # head = 3
+    # q_start, q_end = 0, 16
+    # k_start, k_end = 0, 16
     # print("+------- pred ---------+")
     # print("line 0 - 15")
     # for i in range(q_start, q_end):
@@ -160,18 +161,18 @@ if __name__ == "__main__":
     #     # print("=" * 10)
     
     # exit()
-    print("=" * 10)
-    gt = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
-    print("gt")
-    # print(gt[head, 0, k_start : k_end])
-    # gt = gt[head, 0]
-    print(gt[30, q_start:q_end, k_start:k_end])
-    pred = o_mlx_npy[:, : Q_LEN // 16, :] # [head, 0]
-    # print(pred.shape)
-    print("pred")
-    print(pred[30, q_start:q_end, k_start:k_end])
-    diff = np.abs(gt - pred)#[:, :, k_start : 16]
-    print(f"max |diff| between mlx and torch: {diff.max()}")
+    # print("=" * 10)
+    # gt = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
+    # print("gt")
+    # # print(gt[head, 0, k_start : k_end])
+    # # gt = gt[head, 0]
+    # print(gt[30, q_start:q_end, k_start:k_end])
+    # pred = o_mlx_npy[:, : Q_LEN // 16, :] # [head, 0]
+    # # print(pred.shape)
+    # print("pred")
+    # print(pred[30, q_start:q_end, k_start:k_end])
+    # diff = np.abs(gt - pred)#[:, :, k_start : 16]
+    # print(f"max |diff| between mlx and torch: {diff.max()}")
     # # exit()
 
     # for idx, (cur_gt, cur_pred) in enumerate(zip(gt, pred)):
