@@ -2414,6 +2414,58 @@ array logsumexp(
   return logsumexp(a, std::vector<int>{axis}, keepdims, s);
 }
 
+array maxpooling(const array& a, bool keepdims, StreamOrDevice s /* = {}*/) {
+  std::vector<int> axes(a.ndim());
+  std::iota(axes.begin(), axes.end(), 0);
+  return maxpooling(a, axes, keepdims, s);
+}
+
+array maxpooling(
+    const array& a,
+    const std::vector<int>& axes,
+    bool keepdims /* = false */,
+    StreamOrDevice s /* = {}*/) {
+  // if (a.size() == 0) {
+  //   throw std::invalid_argument("[maxpooling] Received empty array.");
+  // }
+  // if (a.ndim() == 0 && !axes.empty()) {
+  //   throw std::invalid_argument(
+  //       "[maxpooling] Received non-empty axes for array with 0 dimensions.");
+  // }
+  // bool is_complex = issubdtype(a.dtype(), complexfloating);
+  // if (!is_complex && axes.size() == 1 &&
+  //     (a.ndim() == axes[0] + 1 || axes[0] == -1)) {
+  //   auto dtype = at_least_float(a.dtype());
+  //   auto out_shape = a.shape();
+  //   out_shape.back() = 1;
+  //   auto out = array(
+  //       std::move(out_shape),
+  //       dtype,
+  //       std::make_shared<MaxPooling>(to_stream(s)),
+  //       {astype(a, dtype, s)});
+  //   if (!keepdims) {
+  //     out = squeeze(out, -1, s);
+  //   }
+  //   return out;
+  // }
+  // auto maxval = stop_gradient(max(a, axes, true, s), s);
+  // auto out = log(sum(exp(subtract(a, maxval, s), s), axes, keepdims, s), s);
+  // out = add(out, reshape(maxval, out.shape(), s), s);
+  // if (!keepdims) {
+  //   maxval = squeeze(maxval, axes, s);
+  // }
+  // return where(isinf(maxval, s), maxval, out, s);
+  return array(a.shape(), a.dtype(), std::make_shared<MaxPooling>(to_stream(s)), {a});
+}
+
+array maxpooling(
+    const array& a,
+    int axis,
+    bool keepdims /* = false */,
+    StreamOrDevice s /* = {} */) {
+  return maxpooling(a, std::vector<int>{axis}, keepdims, s);
+}
+
 array abs(const array& a, StreamOrDevice s /* = {} */) {
   auto out =
       array(a.shape(), a.dtype(), std::make_shared<Abs>(to_stream(s)), {a});

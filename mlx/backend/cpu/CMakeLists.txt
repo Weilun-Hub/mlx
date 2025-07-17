@@ -54,6 +54,7 @@ target_sources(
           ${CMAKE_CURRENT_SOURCE_DIR}/matmul.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/gemms/cblas.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/masked_mm.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/maxpooling.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/primitives.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/quantized.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/reduce.cpp

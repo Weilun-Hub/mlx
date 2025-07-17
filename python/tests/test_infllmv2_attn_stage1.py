@@ -15,8 +15,8 @@ DTYPE = np.float16
 
 np.set_printoptions(linewidth=np.inf)
 np.set_printoptions(
-    precision=4,   # 小数点后位数
-    suppress=True  # 禁止科学计数法（如 0.0001 显示为 0.0001 而非 1e-4）
+    precision=4,
+    suppress=True  #  0.0001 shown as 0.0001 instead of 1e-4
 )
 
 def naive_infllmv2_attn_stage1_mlx(q, k, v, causal=False):

@@ -8,10 +8,15 @@ python setup.py build_ext --inplace
 # echo "+-------------------------------------------+"
 # python python/tests/test_fast_sdpa_simple.py
 
+# echo "+-------------------------------------------+"
+# echo "|Running tests infllmv2_attention_stage1    |"
+# echo "+-------------------------------------------+"
+# python python/tests/test_infllmv2_attn_stage1.py
+
 echo "+-------------------------------------------+"
-echo "|Running tests infllmv2_attention_stage1    |"
+echo "|Running tests maxpooling                   |"
 echo "+-------------------------------------------+"
-python python/tests/test_infllmv2_attn_stage1.py
+python python/tests/test_maxpooling.py
 
 echo "+-------------------------------------------+"
 echo "|Done!                                      |"

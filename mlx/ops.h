@@ -743,6 +743,26 @@ array logsumexp(
     bool keepdims = false,
     StreamOrDevice s = {});
 
+/** The maxpooling of all elements of the array. */
+array maxpooling(const array& a, bool keepdims, StreamOrDevice s = {});
+inline array maxpooling(const array& a, StreamOrDevice s = {}) {
+  return maxpooling(a, false, to_stream(s));
+}
+
+/** The maxpooling of the elements of an array along the given axes. */
+array maxpooling(
+    const array& a,
+    const std::vector<int>& axes,
+    bool keepdims = false,
+    StreamOrDevice s = {});
+
+/** The maxpooling of the elements of an array along the given axis. */
+array maxpooling(
+    const array& a,
+    int axis,
+    bool keepdims = false,
+    StreamOrDevice s = {});
+
 /** Absolute value of elements in an array. */
 array abs(const array& a, StreamOrDevice s = {});
 

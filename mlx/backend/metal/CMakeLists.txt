@@ -100,6 +100,7 @@ target_sources(
           ${CMAKE_CURRENT_SOURCE_DIR}/hadamard.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/indexing.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/logsumexp.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/maxpooling.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/matmul.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/scaled_dot_product_attention.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/infllmv2_attn_stage1.cpp

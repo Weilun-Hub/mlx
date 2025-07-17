@@ -1394,6 +1394,20 @@ class LogSumExp : public UnaryPrimitive {
   std::vector<Shape> output_shapes(const std::vector<array>& inputs) override;
 };
 
+class MaxPooling : public UnaryPrimitive {
+ public:
+  explicit MaxPooling(Stream stream) : UnaryPrimitive(stream) {}
+
+  void eval_cpu(const std::vector<array>& inputs, array& out) override;
+  void eval_gpu(const std::vector<array>& inputs, array& out) override;
+
+  DEFINE_VMAP()
+  DEFINE_GRADS()
+  DEFINE_PRINT(MaxPooling)
+  DEFINE_DEFAULT_IS_EQUIVALENT()
+  std::vector<Shape> output_shapes(const std::vector<array>& inputs) override;
+};
+
 class Matmul : public UnaryPrimitive {
  public:
   explicit Matmul(Stream stream) : UnaryPrimitive(stream) {}
