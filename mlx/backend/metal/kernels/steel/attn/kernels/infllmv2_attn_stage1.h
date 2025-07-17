@@ -91,21 +91,14 @@ template <
   (void)lid;
 
   // Move to correct block
-  ulong3 tidl{tid.x, tid.y, tid.z}; // #tile_q_len, #head, #batch
+  ulong3 tidl{tid.x, tid.y, tid.z}; // #tile_q_len, #group, #batch
 
-  Q += tidl.z * params->Q_strides[0] + // Batch
-      tidl.y * params->Q_strides[1] + // Head
-      tidl.x * BQ * params->Q_strides[2]; // Sequence. move to q this block prepared to process, 
-
-  ulong kv_head_idx = int(tid.y) / params->gqa_factor; // 32 / 16 = 2
   K += tidl.z * params->K_strides[0] + // Batch
-      kv_head_idx * params->K_strides[1]; // Head. 
-  // move to k this block prepared to process, 
-  // since in a block, q attends to all k, so only need to move to start position of k w.r.t seq len
+      tid.y * params->K_strides[1]; // group. 
 
   O += tidl.z * params->O_strides[0] + // Batch
-    tidl.y * params->O_strides[1] + // Head
-    tidl.x * 2 * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
+    tidl.y * params->O_strides[1] + // group
+    tidl.x * 2 * params->O_strides[2]; // Sequence, each block process q_len of 2
 
   if (has_mask) {
     mask += tidl.z * mask_params->M_strides[0] + // Batch
@@ -130,19 +123,39 @@ template <
   threadgroup T Q_smem[BQ * (BD + padQ)]; // smem: each thread process q_len of 32 * head_dim of 128
   threadgroup T KV_smem[tgp_mem_s]; // smem: each thread process k_len of 16 * head_dim of 128
 
+  // load q to smem
+  // two adjcent q, each q load 1 head group, 2 * 16 * 128
+  // each thread load 1 element, 32 iters needed
+  //  seq_q_idx = 0, head_idx =  0     0, 1, 2, ..., 126, 127
+  //  seq_q_idx = 0, head_idx =  1     0, 1, 2, ..., 126, 127
+  //  seq_q_idx = 0, head_idx =  2     0, 1, 2, ..., 126, 127
+  //   ...
+  //  seq_q_idx = 0, head_idx = 15     0, 1, 2, ..., 126, 127
+  //  seq_q_idx = 1, head_idx =  0     0, 1, 2, ..., 126, 127
+  //  seq_q_idx = 1, head_idx =  1     0, 1, 2, ..., 126, 127
+  //  seq_q_idx = 1, head_idx =  2     0, 1, 2, ..., 126, 127
+  //   ...
+  //  seq_q_idx = 1, head_idx = 15     0, 1, 2, ..., 126, 127
+
+  Q += tidl.z * params->Q_strides[0] + // Batch
+    + tidl.y * params->gqa_factor * params->Q_strides[1] // tidl.y is head group idx, 16 heads in a group
+    + tidl.x * 2 * params->Q_strides[2]; // Sequence, 2 = seq len q to process per block
+
+  static_assert(BQ == 32, "BQ must be 32");
+  const short q_Smem_col = simd_group_id * 32 + simd_lane_id;
+
+  const T scale_ = static_cast<T>(params->scale * 1.44269504089);
+  
+  threadgroup_barrier(mem_flags::mem_none);
+  for (int head_idx = 0; head_idx < params->gqa_factor; ++head_idx) { // gqa_factor = 16, a.k.a. head in a group
+    Q_smem[head_idx * (BD + padQ) + q_Smem_col] = Q[head_idx * params->Q_strides[1] + q_Smem_col] * scale_;
+    Q_smem[(head_idx + params->gqa_factor) * (BD + padQ) + q_Smem_col] = Q[head_idx * params->Q_strides[1] + params->Q_strides[2] + q_Smem_col] * scale_;
+  }
+  threadgroup_barrier(mem_flags::mem_none);
+
   threadgroup T* Qs = Q_smem;
   threadgroup T* Ks = KV_smem; // kv share same smem, k first loaded, then v
   threadgroup T* Ss = KV_smem;
-
-  // Prepare block loaders
-  using QBlockLoader = BlockLoaderT<
-      /* typename T = */ T,
-      /* short BROWS = */ BQ, // 32
-      /* short BCOLS = */ BD, // 128
-      /* short kDstStrRow = */ LDQ_tgp, // 128 + 8 = 136
-      /* short kDstStrCol = */ 1,
-      /* short reduction_dim = */ 1,
-      /* short tgp_size = */ WM * WN * 32>;
 
   // K is loaded in transposed
   using KBlockLoader = BlockLoaderT<
@@ -163,14 +176,10 @@ template <
       /* short reduction_dim = */ 0,
       /* short tgp_size = */ WM * WN * 32>;
 
-  QBlockLoader loader_q(
-      Q, params->Q_strides[2], Qs, simd_group_id, simd_lane_id);
   KBlockLoader loader_k(
       K, params->K_strides[2], Ks, simd_group_id, simd_lane_id);
   KBlockLoader2 loader_k2(
       K, params->K_strides[2], Ks, simd_group_id, simd_lane_id);
-
-  TransformScale<T> ts(static_cast<T>(params->scale * 1.44269504089));
 
   // Prepare MMA tiles
   constexpr short kFragSize = 8; // MMAFrag size
@@ -210,14 +219,6 @@ template <
   constexpr short Ks_tile_stride = kFragSize * LDK_tgp; // 8 * (16 + 8) = 192
 
   threadgroup_barrier(mem_flags::mem_threadgroup);
-
-  // Load Q blocks apply scale
-  if (!align_Q && int(tid.x) == (params->NQ_aligned)) {
-    loader_q.load_safe(short2(BD, params->qL_rem));
-  } else {
-    loader_q.load_unsafe();
-  }
-  loader_q.apply_inplace_op(ts);
 
   // Init row reduction variables
   constexpr short kRowsPT = decltype(Stile)::kRowsPerThread; // 1 row per thread, 1 warp process 32 rows
@@ -260,7 +261,7 @@ template <
     for (short dd = 0; dd < TD; dd++) { // loop over head dim dimension 0, 1, 2, ..., 15. TD = 16
       simdgroup_barrier(mem_flags::mem_none);
 
-      Qtile.template load<T, 1, 1, LDQ_tgp, 1>(
+      Qtile.template load<T, 1, 1, BQ, 1>(
           &Qs[Qs_offset + dd * Qs_tile_stride]);
       Ktile.template load<T, 1, 1, LDK_tgp, 1>(
           &Ks[Ks_offset + dd * Ks_tile_stride]);
@@ -420,7 +421,7 @@ template <
     for (short dd = 0; dd < TD; dd++) { // loop over head dim dimension 0, 1, 2, ..., 15. TD = 16
       simdgroup_barrier(mem_flags::mem_none);
 
-      Qtile.template load<T, 1, 1, LDQ_tgp, 1>(
+      Qtile.template load<T, 1, 1, BQ, 1>(
           &Qs[Qs_offset + dd * Qs_tile_stride]);
       Ktile.template load<T, 1, 1, LDK_tgp, 1>(
           &Ks[Ks_offset + dd * Ks_tile_stride]);

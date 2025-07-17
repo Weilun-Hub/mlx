@@ -62,6 +62,8 @@ void infllmv2_attention_stage1_metal(
   int D = q.shape(3);
   int gqa_factor = q.shape(1) / k.shape(1);
   printf("[DEBUG ZWL] B: %d, H: %d, D: %d, gqa_factor: %d\n", B, H, D, gqa_factor);
+  
+  assert(gqa_factor == 16);
 
   int qL = q.shape(2);
   // H /= gqa_factor;
@@ -138,7 +140,6 @@ void infllmv2_attention_stage1_metal(
       /* int qL_off = */ (kL - qL),
 
       /* int64_t Q_strides[3] = */ {q.strides(0), q.strides(1), q.strides(2)},
-      // /* int64_t Q_strides[3] = */ {q.strides(0) * gqa_factor, q.strides(1) / gqa_factor, q.strides(2)},
       /* int64_t K_strides[3] = */ {k.strides(0), k.strides(1), k.strides(2)},
       /* int64_t V_strides[3] = */ {v.strides(0), v.strides(1), v.strides(2)},
       /* int64_t O_strides[3] = */ {o.strides(0), o.strides(1), o.strides(2)}};
@@ -160,9 +161,17 @@ void infllmv2_attention_stage1_metal(
     compute_encoder.set_input_array(m, 6);
   }
 
-  MTL::Size grid_dims = MTL::Size(NQ, H, B);
+  int num_q_per_block = 2;
+  int num_block_q = (qL + num_q_per_block - 1) / num_q_per_block;
+  printf("[DEBUG ZWL] num_q_per_block: %d, num_block_q: %d\n", num_q_per_block, num_block_q);
+
+  int head_group_num = k.shape(1);
+  printf("[DEBUG ZWL] head group num: %d\n", head_group_num);
+  
+  MTL::Size grid_dims = MTL::Size(num_block_q, head_group_num, B);
   MTL::Size group_dims = MTL::Size(32, wm, wn);
-  printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", NQ, H, B);
+
+  printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", num_block_q, head_group_num, B);
   printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", 32, wm, wn);
   
   compute_encoder.dispatch_threadgroups(grid_dims, group_dims);

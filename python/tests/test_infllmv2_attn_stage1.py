@@ -37,8 +37,8 @@ def naive_infllmv2_attn_stage1_mlx(q, k, v, causal=False):
         exit()
     score = mx.softmax(score, axis=-1)
 
-    # score = score.reshape(batch_size, n_kv_head, n_repeat, q_len, k_len)
-    # score = score.sum(axis=2)
+    score = score.reshape(batch_size, n_kv_head, n_repeat, q_len, k_len)
+    score = score.sum(axis=2)
     
     return score
 
@@ -76,9 +76,9 @@ if __name__ == "__main__":
 
     score_mlx = naive_infllmv2_attn_stage1_mlx(q_mlx, k_mlx, v_mlx, causal=False)
     score_mlx_npy = np.array(score_mlx).squeeze(0)
-    # print(score_mlx_npy.shape)
+    print(score_mlx_npy.shape)
     # exit()
-    score_mlx_npy = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
+    # score_mlx_npy = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
     # print(score_mlx_npy.shape)
     # exit()
     # score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
@@ -103,20 +103,20 @@ if __name__ == "__main__":
     
     diff = np.abs(o_mlx_npy - score_mlx_npy)
     print(f"max |diff| between mlx and torch: {diff.max()}")
-    exit()
+    # exit()
 
     # diff = np.abs(o_mlx_npy[:, :, :8] - score_mlx_npy[:, :, :8])
     # print(f"max |diff|[:, :, :8] between mlx and torch: {diff.max()}")
     # diff = np.abs(o_mlx_npy[:, :, 8:] - score_mlx_npy[:, :, 8:])
     # print(f"max |diff|[:, :, 8:] between mlx and torch: {diff.max()}")
 
-    # head = 3
-    # q_start, q_end = 0, 16
-    # k_start, k_end = 0, 16
-    # print("+------- pred ---------+")
-    # print("line 0 - 15")
-    # for i in range(q_start, q_end):
-    #     print(o_mlx_npy[head, i, k_start : k_end])
+    head = 0
+    q_start, q_end = 0, 8
+    k_start, k_end = 0, 8
+    print("+------- pred ---------+")
+    print("line 0 - 7")
+    for i in range(q_start, q_end):
+        print(o_mlx_npy[head, i, k_start : k_end])
     
     # print("line 16 - 31")
     # for i in range(q_start, q_end):
@@ -133,9 +133,10 @@ if __name__ == "__main__":
     # for i in range(q_start, q_end):
     #     print(o_mlx_npy[head, i + 48, k_start : k_end])
 
-    # print("+------- gt ---------+")
-    # for i in range(q_start, q_end):
-    #     print(score_mlx_npy[head, i + 32, k_start : k_end])
+    print("+------- gt ---------+")
+    print("line 0 - 7")
+    for i in range(q_start, q_end):
+        print(score_mlx_npy[head, i, k_start : k_end])
     # print("line 0 - 7")
     # print(score_mlx_npy[head, 0:8, k_start : k_end].sum(axis=-2))
     # print("line 8 - 15")
