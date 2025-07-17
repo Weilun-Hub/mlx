@@ -103,10 +103,6 @@ template <
   // move to k this block prepared to process, 
   // since in a block, q attends to all k, so only need to move to start position of k w.r.t seq len
 
-  // O += tidl.z * params->O_strides[0] + // Batch
-  //     tidl.y * params->O_strides[1] + // Head
-  //     tidl.x * BQ * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
-
   O += tidl.z * params->O_strides[0] + // Batch
     tidl.y * params->O_strides[1] + // Head
     tidl.x * 2 * params->O_strides[2]; // Sequence, BQ = 32, each block process q_len of 32
@@ -127,17 +123,16 @@ template <
 
   constexpr short tgp_mem_0 = (BK + padK) * (BD); // (16 + 8) * 128 = 3072
   constexpr short tgp_mem_1 = BK * (BD + padV); // 16 * (128 + 8) = 2176
-  // constexpr short tgp_mem_2 = BQ * (BK + padK); // 32 * (16 + 8) = 768
-  constexpr short tgp_mem_s = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1; // 3072
-  // constexpr short tgp_mem_s = tgp_mem_2 > tgp_mem_s_ ? tgp_mem_2 : tgp_mem_s_; // 3072
+  constexpr short tgp_mem_2 = BQ * (BK + padK); // 32 * (16 + 8) = 768
+  constexpr short tgp_mem_s_ = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1; // 3072
+  constexpr short tgp_mem_s = tgp_mem_2 > tgp_mem_s_ ? tgp_mem_2 : tgp_mem_s_; // 3072
 
   threadgroup T Q_smem[BQ * (BD + padQ)]; // smem: each thread process q_len of 32 * head_dim of 128
   threadgroup T KV_smem[tgp_mem_s]; // smem: each thread process k_len of 16 * head_dim of 128
-  threadgroup T O_smem[BQ * (BK + padK)];
 
   threadgroup T* Qs = Q_smem;
   threadgroup T* Ks = KV_smem; // kv share same smem, k first loaded, then v
-  threadgroup T* Ss = O_smem;
+  threadgroup T* Ss = KV_smem;
 
   // Prepare block loaders
   using QBlockLoader = BlockLoaderT<
@@ -407,8 +402,6 @@ template <
     loader_k.next();
   }
 
-  // O += (tm + sm) * params->O_strides[2] + sn;
-
   // 2nd Loop over KV seq length to do softmax
   for (int kb = 0; kb < kb_lim; kb++) {
     // Load K block and apply scale
@@ -550,10 +543,7 @@ template <
     simdgroup_barrier(mem_flags::mem_none);
     if ((simd_group_id % 2) == 0 && sm == 0) {
       Stile.template store<T, 1, 1>(O + (simd_group_id / 2) * params->O_strides[2] + kb * BK + sn, params->O_strides[2]);
-      // Stile.template store<T, 1, 1>(O + kb * BK + sn, params->O_strides[2]);
     }
-
-    // Stile.template store<T, 1, 1>(O + kb * BK, params->O_strides[2]);
 
     simdgroup_barrier(mem_flags::mem_none);
 
