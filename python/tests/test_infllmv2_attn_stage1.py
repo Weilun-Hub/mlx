@@ -37,8 +37,8 @@ def naive_infllmv2_attn_stage1_mlx(q, k, v, causal=False):
         exit()
     score = mx.softmax(score, axis=-1)
 
-    score = score.reshape(batch_size, n_kv_head, n_repeat, q_len, k_len)
-    score = score.sum(axis=2)
+    # score = score.reshape(batch_size, n_kv_head, n_repeat, q_len, k_len)
+    # score = score.sum(axis=2)
     
     return score
 
@@ -76,17 +76,17 @@ if __name__ == "__main__":
 
     score_mlx = naive_infllmv2_attn_stage1_mlx(q_mlx, k_mlx, v_mlx, causal=False)
     score_mlx_npy = np.array(score_mlx).squeeze(0)
-    print(score_mlx_npy.shape)
-    # exit()
-    # score_mlx_npy = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
     # print(score_mlx_npy.shape)
     # exit()
-    score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
-    score_torch_npy = score_torch.numpy()
+    score_mlx_npy = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
+    # print(score_mlx_npy.shape)
+    # exit()
+    # score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
+    # score_torch_npy = score_torch.numpy()
 
-    diff = np.abs(score_mlx_npy - score_torch_npy)
-    print("max |diff| between mlx and torch: ", diff.max())
-    exit()
+    # diff = np.abs(score_mlx_npy - score_torch_npy)
+    # print("max |diff| between mlx and torch: ", diff.max())
+    # exit()
 
     scale = float(1.0 / math.sqrt(HEAD_DIM))
 
@@ -101,9 +101,9 @@ if __name__ == "__main__":
     # print("pred zero elements: ", (o_mlx_npy == 0).sum(), "out of ", o_mlx_npy.size, "=", (o_mlx_npy == 0).sum() / o_mlx_npy.size)
     # print("gt zero elements: ", (score_mlx_npy == 0).sum(), "out of ", score_mlx_npy.size, "=", (score_mlx_npy == 0).sum() / score_mlx_npy.size)
     
-    # diff = np.abs(o_mlx_npy - score_mlx_npy)
-    # print(f"max |diff| between mlx and torch: {diff.max()}")
-    # exit()
+    diff = np.abs(o_mlx_npy - score_mlx_npy)
+    print(f"max |diff| between mlx and torch: {diff.max()}")
+    exit()
 
     # diff = np.abs(o_mlx_npy[:, :, :8] - score_mlx_npy[:, :, :8])
     # print(f"max |diff|[:, :, :8] between mlx and torch: {diff.max()}")
