@@ -89,7 +89,7 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
     compute_encoder.set_input_array(in, 0);
     compute_encoder.set_output_array(out, 1);
     compute_encoder.set_bytes(axis_size, 2);
-    compute_encoder.dispatch_threads(grid_dims, group_dims);
+    // compute_encoder.dispatch_threads(grid_dims, group_dims);
   }
 }
 

@@ -2455,6 +2455,45 @@ void init_ops(nb::module_& m) {
             array: The output array with the corresponding axes reduced.
       )pbdoc");
   m.def(
+      "maxpooling",
+      [](const mx::array& a,
+         int cache_len,
+         int init_blocks,
+         int local_blocks,
+         int kernel_size,
+         int stride,
+         int padding,
+         int block_size,
+         mx::StreamOrDevice s) {
+        return mx::maxpooling(a, cache_len, init_blocks, local_blocks, kernel_size, stride, padding, block_size, s);
+      },
+      nb::arg(),
+      "cache_len"_a = nb::none(),
+      "init_blocks"_a = 1,
+      "local_blocks"_a = 32,
+      "kernel_size"_a = 5,
+      "stride"_a = 4,
+      "padding"_a = 2,
+      "block_size"_a = 64,
+      nb::kw_only(),
+      "stream"_a = nb::none(),
+      nb::sig(
+          "def maxpooling(a: array, /, cache_len: int = None, init_blocks: int = 1, local_blocks: int 32, kernel_size: 5, stride: 4, padding: 2, block_size: 64, stream: Union[None, Stream, Device] = None) -> array"),
+      R"pbdoc(
+        Max pooling operation over the given axes.
+
+        Args:
+            a (array): Input array.
+            axis (int or list(int), optional): Optional axis or
+              axes to perform max pooling over. If unspecified this defaults
+              to performing max pooling over the entire array.
+            keepdims (bool, optional): Keep reduced axes as
+              singleton dimensions, defaults to `False`.
+
+        Returns:
+            array: The output array with max pooling applied.
+      )pbdoc");
+  m.def(
       "mean",
       [](const mx::array& a,
          const IntOrVec& axis,

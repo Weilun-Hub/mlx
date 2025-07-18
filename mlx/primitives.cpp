@@ -2783,11 +2783,11 @@ std::pair<std::vector<array>, std::vector<int>> MaxPooling::vmap(
     const std::vector<int>& axes) {
   auto ax = axes[0];
   auto in = inputs[0];
-  if (ax == (in.ndim() - 1)) {
-    in = swapaxes(in, -1, -2, stream());
-    ax = in.ndim() - 2;
-  }
-  return {{maxpooling(in, -1, true, stream())}, {ax}};
+  // if (ax == (in.ndim() - 1)) {
+  //   in = swapaxes(in, -1, -2, stream());
+  //   ax = in.ndim() - 2;
+  // }
+  return {{maxpooling(in, cache_len_, init_blocks_, local_blocks_, kernel_size_, stride_, padding_, block_size_, stream())}, {ax}};
 }
 
 std::vector<array> MaxPooling::vjp(
@@ -2797,10 +2797,7 @@ std::vector<array> MaxPooling::vjp(
     const std::vector<array>&) {
   assert(primals.size() == 1);
   assert(cotangents.size() == 1);
-  return {multiply(
-      cotangents[0],
-      softmax(primals[0], std::vector<int>{-1}, true, stream()),
-      stream())};
+  return {zeros_like(cotangents[0], stream())};
 }
 
 std::vector<array> MaxPooling::jvp(
@@ -2809,10 +2806,7 @@ std::vector<array> MaxPooling::jvp(
     const std::vector<int>& argnums) {
   assert(primals.size() == 1);
   assert(tangents.size() == 1);
-  return {multiply(
-      tangents[0],
-      softmax(primals[0], std::vector<int>{-1}, true, stream()),
-      stream())};
+  return {zeros_like(tangents[0], stream())};
 }
 
 std::vector<Shape> MaxPooling::output_shapes(const std::vector<array>& inputs) {

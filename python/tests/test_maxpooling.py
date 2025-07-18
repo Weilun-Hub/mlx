@@ -7,6 +7,7 @@ np.random.seed(0)
 
 round_q = lambda len_q : (len_q * 16 + 128 - 1) // 128 * 128 // 16
 
+BATCH_SIZE = 1
 NUM_HEAD = 2
 LEN_Q = 14001
 LEN_Q_ROUND = round_q(LEN_Q)
@@ -93,12 +94,15 @@ void maxpooling_func(
 """
 
 def naive_maxpooling_npy(score, cache_len, init_blocks, local_blocks, kernel_size, stride, padding, block_size):
-    num_head, q_len, k_len = score.shape
+    
+    batch_size, num_head, q_len, k_len = score.shape
+    assert batch_size == 1
+
     total_len = q_len + cache_len
     q_block = total_len // block_size
     out_len = (total_len + block_size - 1) // block_size
     
-    max_val = np.zeros((num_head, q_len, out_len), dtype=score.dtype)
+    max_val = np.zeros((batch_size, num_head, q_len, out_len), dtype=score.dtype)
 
     for i in range(out_len):
         start = i * stride - padding
@@ -106,24 +110,28 @@ def naive_maxpooling_npy(score, cache_len, init_blocks, local_blocks, kernel_siz
         start = max(start, 0)
         end = min(end, q_len)
         if (i < init_blocks):
-            max_val[:, :, i] = np.inf
+            max_val[:, :, :, i] = np.inf
         elif (q_block - local_blocks < i):
-            max_val[:, :, i] = -np.inf
+            max_val[:, :, :, i] = -np.inf
         else:
-            max_val[:, :, i] = score[:, :, start:end].max(axis=-1)
+            max_val[:, :, :, i] = score[:, :, :, start:end].max(axis=-1)
     
     return max_val
 
 
 if __name__ == "__main__":
     
-    score_npy = np.random.normal(0.0, 1.0, (NUM_HEAD, LEN_Q, LEN_K)).astype(DTYPE)
+    score_npy = np.random.normal(0.0, 1.0, (BATCH_SIZE, NUM_HEAD, LEN_Q, LEN_K)).astype(DTYPE)
     print(score_npy.shape)
 
     max_val_npy = naive_maxpooling_npy(score_npy, LEN_CACHE, INIT_BLOCK, LOCAL_BLOCK, KERNEL_SIZE, STRIDE, PADDING, BLOCK_SIZE)
-    print(max_val_npy)
-    exit()
+    # print(max_val_npy)
+    # exit()
 
-    # score_mlx = mx.array(score_npy)
+    score_mlx = mx.array(score_npy)
+
+    output = mx.maxpooling(score_mlx, LEN_CACHE, INIT_BLOCK, LOCAL_BLOCK, KERNEL_SIZE, STRIDE, PADDING, BLOCK_SIZE)
+
+    print(output.shape)
     
     

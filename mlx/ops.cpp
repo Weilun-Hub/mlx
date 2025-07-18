@@ -2414,56 +2414,56 @@ array logsumexp(
   return logsumexp(a, std::vector<int>{axis}, keepdims, s);
 }
 
-array maxpooling(const array& a, bool keepdims, StreamOrDevice s /* = {}*/) {
-  std::vector<int> axes(a.ndim());
-  std::iota(axes.begin(), axes.end(), 0);
-  return maxpooling(a, axes, keepdims, s);
-}
+// array maxpooling(const array& a, bool keepdims, StreamOrDevice s /* = {}*/) {
+//   std::vector<int> axes(a.ndim());
+//   std::iota(axes.begin(), axes.end(), 0);
+//   return maxpooling(a, axes, keepdims, s);
+// }
 
 array maxpooling(
     const array& a,
-    const std::vector<int>& axes,
-    bool keepdims /* = false */,
-    StreamOrDevice s /* = {}*/) {
-  // if (a.size() == 0) {
-  //   throw std::invalid_argument("[maxpooling] Received empty array.");
-  // }
-  // if (a.ndim() == 0 && !axes.empty()) {
-  //   throw std::invalid_argument(
-  //       "[maxpooling] Received non-empty axes for array with 0 dimensions.");
-  // }
-  // bool is_complex = issubdtype(a.dtype(), complexfloating);
-  // if (!is_complex && axes.size() == 1 &&
-  //     (a.ndim() == axes[0] + 1 || axes[0] == -1)) {
-  //   auto dtype = at_least_float(a.dtype());
-  //   auto out_shape = a.shape();
-  //   out_shape.back() = 1;
-  //   auto out = array(
-  //       std::move(out_shape),
-  //       dtype,
-  //       std::make_shared<MaxPooling>(to_stream(s)),
-  //       {astype(a, dtype, s)});
-  //   if (!keepdims) {
-  //     out = squeeze(out, -1, s);
-  //   }
-  //   return out;
-  // }
-  // auto maxval = stop_gradient(max(a, axes, true, s), s);
-  // auto out = log(sum(exp(subtract(a, maxval, s), s), axes, keepdims, s), s);
-  // out = add(out, reshape(maxval, out.shape(), s), s);
-  // if (!keepdims) {
-  //   maxval = squeeze(maxval, axes, s);
-  // }
-  // return where(isinf(maxval, s), maxval, out, s);
-  return array(a.shape(), a.dtype(), std::make_shared<MaxPooling>(to_stream(s)), {a});
-}
-
-array maxpooling(
-    const array& a,
-    int axis,
-    bool keepdims /* = false */,
+    int cache_len,
+    int init_blocks /* = 1 */,
+    int local_blocks /* = 32 */,
+    int kernel_size /* = 5 */,
+    int stride /* = 4 */,
+    int padding /* = 2 */,
+    int block_size /* = 64 */,
     StreamOrDevice s /* = {} */) {
-  return maxpooling(a, std::vector<int>{axis}, keepdims, s);
+  if (a.size() == 0) {
+    throw std::invalid_argument("[maxpooling] Received empty array.");
+  }
+
+  if (a.ndim() != 4) {
+    throw std::invalid_argument("[maxpooling] Received array with " + std::to_string(a.ndim()) + " dimensions, expected 3.");
+  }
+  if (a.shape(0) != 1) {
+    throw std::invalid_argument("[maxpooling] Received array with shape " + std::to_string(a.shape(0)) + ", expected 1.");
+  }
+
+  int num_head = a.shape(1);
+  int q_len = a.shape(2);
+  int k_len = a.shape(3);
+
+  int total_len = q_len + cache_len;
+  int out_len = (total_len + block_size - 1) / block_size;
+
+  auto dtype = at_least_float(a.dtype());
+  auto out_shape = {1, num_head, q_len, out_len};
+  auto out = array(
+      std::move(out_shape),
+      dtype,
+      std::make_shared<MaxPooling>(
+        to_stream(s),
+        cache_len,
+        init_blocks,
+        local_blocks,
+        kernel_size,
+        stride,
+        padding,
+        block_size),
+      {astype(a, dtype, s)});
+  return out;
 }
 
 array abs(const array& a, StreamOrDevice s /* = {} */) {

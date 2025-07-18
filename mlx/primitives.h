@@ -1396,7 +1396,7 @@ class LogSumExp : public UnaryPrimitive {
 
 class MaxPooling : public UnaryPrimitive {
  public:
-  explicit MaxPooling(Stream stream) : UnaryPrimitive(stream) {}
+  explicit MaxPooling(Stream stream, int cache_len, int init_blocks, int local_blocks, int kernel_size, int stride, int padding, int block_size) : UnaryPrimitive(stream), cache_len_(cache_len), init_blocks_(init_blocks), local_blocks_(local_blocks), kernel_size_(kernel_size), stride_(stride), padding_(padding), block_size_(block_size) {}
 
   void eval_cpu(const std::vector<array>& inputs, array& out) override;
   void eval_gpu(const std::vector<array>& inputs, array& out) override;
@@ -1406,6 +1406,20 @@ class MaxPooling : public UnaryPrimitive {
   DEFINE_PRINT(MaxPooling)
   DEFINE_DEFAULT_IS_EQUIVALENT()
   std::vector<Shape> output_shapes(const std::vector<array>& inputs) override;
+  
+  // Add state method for serialization
+  std::tuple<int, int, int, int, int, int, int> state() const {
+    return {cache_len_, init_blocks_, local_blocks_, kernel_size_, stride_, padding_, block_size_};
+  }
+
+ private:
+  int cache_len_;
+  int init_blocks_;
+  int local_blocks_;
+  int kernel_size_;
+  int stride_;
+  int padding_;
+  int block_size_;
 };
 
 class Matmul : public UnaryPrimitive {
