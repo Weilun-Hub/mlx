@@ -10,6 +10,8 @@ struct MaxPoolingParams {
     int stride;
     int padding;
     int block_size;
+    int64_t in_strides[3];
+    int64_t out_strides[3];
 };
 
 } // namespace mlx::core

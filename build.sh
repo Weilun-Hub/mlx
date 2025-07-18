@@ -3,6 +3,8 @@ echo "|Building mlx                               |"
 echo "+-------------------------------------------+"
 python setup.py build_ext --inplace
 
+cd python/tests
+
 # echo "+-------------------------------------------+"
 # echo "|Running tests scaled_dot_product_attention |"
 # echo "+-------------------------------------------+"
@@ -16,7 +18,7 @@ python setup.py build_ext --inplace
 echo "+-------------------------------------------+"
 echo "|Running tests maxpooling                   |"
 echo "+-------------------------------------------+"
-python python/tests/test_maxpooling.py
+python test_maxpooling.py
 
 echo "+-------------------------------------------+"
 echo "|Done!                                      |"

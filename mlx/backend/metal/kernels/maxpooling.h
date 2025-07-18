@@ -4,74 +4,47 @@
 
 using mlx::core::MaxPoolingParams;
 
-template <typename T, typename AccT = float, int N_READS = 4>
-[[kernel]] void maxpooling(
+template <typename T, int THREADGROUP_SIZE = 128>
+[[kernel, max_total_threads_per_threadgroup(THREADGROUP_SIZE)]] void maxpooling(
     const device T* in [[buffer(0)]],
     device T* out [[buffer(1)]],
     const constant MaxPoolingParams* params [[buffer(2)]],
-    uint gid [[threadgroup_position_in_grid]],
-    uint _lid [[thread_position_in_threadgroup]],
     uint simd_lane_id [[thread_index_in_simdgroup]],
-    uint simd_group_id [[simdgroup_index_in_threadgroup]]) {
-  int lid = _lid;
+    uint simd_group_id [[simdgroup_index_in_threadgroup]],
+    uint3 gid [[threadgroup_position_in_grid]],
+    uint3 lid [[thread_position_in_threadgroup]]) {
+  (void)lid;
+  
+  ulong3 tidl{gid.x, gid.y, gid.z}; // #q, #head, #batch
+  int tid = lid.x;
 
-  constexpr int SIMD_SIZE = 32;
+  const device T* in_ptr = in + tidl.z * params->in_strides[0] + tidl.y * params->in_strides[1] + tidl.x * params->in_strides[2];
+  device T* out_ptr = out + tidl.z * params->out_strides[0] + tidl.y * params->out_strides[1] + tidl.x * params->out_strides[2];
 
-  threadgroup AccT local_max[SIMD_SIZE];
-  threadgroup AccT local_normalizer[SIMD_SIZE];
+  int q_block = (tidl.x + params->cache_len) / params->block_size;
 
-  AccT ld[N_READS];
+  constexpr auto neg_inf = Limits<T>::finite_min;
+  constexpr auto pos_inf = Limits<T>::finite_max;
 
-  // in += gid * size_t(axis_size) + lid * N_READS;
-  // if (lid * N_READS + N_READS <= axis_size) {
-  //   for (int i = 0; i < N_READS; i++) {
-  //     ld[i] = AccT(in[i]);
-  //   }
-  // } else {
-  //   for (int i = 0; i < N_READS; i++) {
-  //     ld[i] =
-  //         ((lid * N_READS + i) < axis_size) ? AccT(in[i]) : Limits<AccT>::min;
-  //   }
-  // }
-  // if (simd_group_id == 0) {
-  //   local_max[simd_lane_id] = Limits<AccT>::min;
-  //   local_normalizer[simd_lane_id] = 0;
-  // }
-  // threadgroup_barrier(mem_flags::mem_threadgroup);
+  for (int k = tid; k < params->out_strides[2]; k += THREADGROUP_SIZE) {
+    int start = k * params->stride - params->padding;
+    int end = start + params->kernel_size;
+    start = start > 0 ? start : 0;
+    end = end < params->in_strides[2] ? end : params->in_strides[2];
 
-  // // Get the max
-  // AccT maxval = Limits<AccT>::finite_min;
-  // for (int i = 0; i < N_READS; i++) {
-  //   maxval = (maxval < ld[i]) ? ld[i] : maxval;
-  // }
-  // maxval = simd_max(maxval);
-  // if (simd_lane_id == 0) {
-  //   local_max[simd_group_id] = maxval;
-  // }
-  // threadgroup_barrier(mem_flags::mem_threadgroup);
-  // if (simd_group_id == 0) {
-  //   maxval = simd_max(local_max[simd_lane_id]);
-  //   if (simd_lane_id == 0) {
-  //     local_max[0] = maxval;
-  //   }
-  // }
-  // threadgroup_barrier(mem_flags::mem_threadgroup);
-  // maxval = local_max[0];
-
-  // // Compute exp(x_i - maxval) and store the partial sums in local_normalizer
-  // AccT normalizer = 0;
-  // for (int i = 0; i < N_READS; i++) {
-  //   normalizer += fast::exp(ld[i] - maxval);
-  // }
-  // normalizer = simd_sum(normalizer);
-  // if (simd_lane_id == 0) {
-  //   local_normalizer[simd_group_id] = normalizer;
-  // }
-  // threadgroup_barrier(mem_flags::mem_threadgroup);
-  // if (simd_group_id == 0) {
-  //   normalizer = simd_sum(local_normalizer[simd_lane_id]);
-  //   if (simd_lane_id == 0) {
-  //     out[gid] = isinf(maxval) ? T(maxval) : T(log(normalizer) + maxval);
-  //   }
-  // }
+    T max_val = -1;
+    if (k < params->init_blocks) {
+      max_val = pos_inf;
+    } else if (q_block - params->local_blocks < k) {
+      max_val = neg_inf;
+    } else {
+      max_val = in_ptr[start];
+      for (int i = start + 1; i < end; i++) {
+        if (in_ptr[i] > max_val) {
+          max_val = in_ptr[i];
+        }
+      }
+    }
+    out_ptr[k] = max_val;
+  }
 }

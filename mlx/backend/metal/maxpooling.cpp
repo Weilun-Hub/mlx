@@ -12,8 +12,6 @@
 
 namespace mlx::core {
 
-// constexpr int MAXPOOLING_LOOPED_LIMIT = 4096;
-
 void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
   if (!issubdtype(out.dtype(), floating)) {
@@ -55,11 +53,12 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
 
   const int simd_size = 32;
   const int n_reads = 4;
-  // const int looped_limit = MAXPOOLING_LOOPED_LIMIT;
 
-  // std::string kernel_name = (axis_size > looped_limit) ? "looped_" : "block_";
   std::string kernel_name = "maxpooling_";
   kernel_name += type_to_name(out);
+
+  printf("[DEBUG ZWL] in.strides: %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2));
+  printf("[DEBUG ZWL] out.strides: %d, %d, %d\n", out.strides(0), out.strides(1), out.strides(2));
 
   MaxPoolingParams params{
     /* cache_len = */ cache_len_,
@@ -68,7 +67,9 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
     /* kernel_size = */ kernel_size_,
     /* stride = */ stride_,
     /* padding = */ padding_,
-    /* block_size = */ block_size_
+    /* block_size = */ block_size_,
+    /* in_strides = */ {in.strides(0), in.strides(1), in.strides(2)},
+    /* out_strides = */ {out.strides(0), out.strides(1), out.strides(2)}
   };
 
   auto kernel = get_maxpooling_kernel(d, kernel_name, out);
@@ -86,7 +87,7 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
     compute_encoder.set_input_array(in, 0);
     compute_encoder.set_output_array(out, 1);
     compute_encoder.set_bytes(params, 2);
-    compute_encoder.dispatch_threads(grid_dims, group_dims);
+    compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
   }
 }
 

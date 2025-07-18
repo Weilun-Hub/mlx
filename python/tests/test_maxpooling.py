@@ -17,7 +17,7 @@ INIT_BLOCK = 1
 LOCAL_BLOCK = 32
 KERNEL_SIZE = 5
 STRIDE = 4
-PADDING = 2
+PADDING = 1
 BLOCK_SIZE = 64
 DTYPE = np.float16
 
@@ -93,46 +93,23 @@ void maxpooling_func(
 } 
 """
 
-def naive_maxpooling_npy(score, cache_len, init_blocks, local_blocks, kernel_size, stride, padding, block_size):
-    
-    batch_size, num_head, q_len, k_len = score.shape
-    assert batch_size == 1
-
-    total_len = q_len + cache_len
-    q_block = total_len // block_size
-    out_len = (total_len + block_size - 1) // block_size
-    
-    max_val = np.zeros((batch_size, num_head, q_len, out_len), dtype=score.dtype)
-
-    for i in range(out_len):
-        start = i * stride - padding
-        end = start + kernel_size
-        start = max(start, 0)
-        end = min(end, q_len)
-        if (i < init_blocks):
-            max_val[:, :, :, i] = np.inf
-        elif (q_block - local_blocks < i):
-            max_val[:, :, :, i] = -np.inf
-        else:
-            max_val[:, :, :, i] = score[:, :, :, start:end].max(axis=-1)
-    
-    return max_val
-
-
 if __name__ == "__main__":
     
     score_npy = np.random.normal(0.0, 1.0, (BATCH_SIZE, NUM_HEAD, LEN_Q, LEN_K)).astype(DTYPE)
-    # print(score_npy.shape)
 
-    max_val_npy = naive_maxpooling_npy(score_npy, LEN_CACHE, INIT_BLOCK, LOCAL_BLOCK, KERNEL_SIZE, STRIDE, PADDING, BLOCK_SIZE)
-    print(max_val_npy.shape)
-    # exit()
+    gt = np.fromfile("./output.bin", dtype=DTYPE).reshape(BATCH_SIZE, NUM_HEAD, LEN_Q, (LEN_Q + BLOCK_SIZE - 1) // BLOCK_SIZE)
+    gt[gt == np.inf] = 65504
+    gt[gt == -np.inf] = -65504
+    print(gt.shape)
 
     score_mlx = mx.array(score_npy)
 
-    output = mx.maxpooling(score_mlx, LEN_CACHE, INIT_BLOCK, LOCAL_BLOCK, KERNEL_SIZE, STRIDE, PADDING, BLOCK_SIZE)
+    max_val_mlx_pred = mx.maxpooling(score_mlx, LEN_CACHE, INIT_BLOCK, LOCAL_BLOCK, KERNEL_SIZE, STRIDE, PADDING, BLOCK_SIZE)
+    max_val_npy_pred = np.array(max_val_mlx_pred)
+    print(max_val_npy_pred.shape)
 
-    print(output.shape)
-    print(output[0, 0, 0, 0])
+    diff = np.abs(max_val_npy_pred - gt)
+
+    print(f"max |diff| between mlx and torch: {diff.max()}")
     
     
