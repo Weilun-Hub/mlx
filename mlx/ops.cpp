@@ -2414,12 +2414,6 @@ array logsumexp(
   return logsumexp(a, std::vector<int>{axis}, keepdims, s);
 }
 
-// array maxpooling(const array& a, bool keepdims, StreamOrDevice s /* = {}*/) {
-//   std::vector<int> axes(a.ndim());
-//   std::iota(axes.begin(), axes.end(), 0);
-//   return maxpooling(a, axes, keepdims, s);
-// }
-
 array maxpooling(
     const array& a,
     int cache_len,

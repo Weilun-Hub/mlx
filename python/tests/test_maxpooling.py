@@ -122,10 +122,10 @@ def naive_maxpooling_npy(score, cache_len, init_blocks, local_blocks, kernel_siz
 if __name__ == "__main__":
     
     score_npy = np.random.normal(0.0, 1.0, (BATCH_SIZE, NUM_HEAD, LEN_Q, LEN_K)).astype(DTYPE)
-    print(score_npy.shape)
+    # print(score_npy.shape)
 
     max_val_npy = naive_maxpooling_npy(score_npy, LEN_CACHE, INIT_BLOCK, LOCAL_BLOCK, KERNEL_SIZE, STRIDE, PADDING, BLOCK_SIZE)
-    # print(max_val_npy)
+    print(max_val_npy.shape)
     # exit()
 
     score_mlx = mx.array(score_npy)
@@ -133,5 +133,6 @@ if __name__ == "__main__":
     output = mx.maxpooling(score_mlx, LEN_CACHE, INIT_BLOCK, LOCAL_BLOCK, KERNEL_SIZE, STRIDE, PADDING, BLOCK_SIZE)
 
     print(output.shape)
+    print(output[0, 0, 0, 0])
     
     

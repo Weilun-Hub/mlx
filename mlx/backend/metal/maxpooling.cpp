@@ -6,10 +6,13 @@
 #include "mlx/backend/metal/kernels.h"
 #include "mlx/backend/metal/utils.h"
 #include "mlx/primitives.h"
+#include "mlx/backend/metal/maxpooling.h"
+#include <iostream>
+#include <cassert>
 
 namespace mlx::core {
 
-constexpr int MAXPOOLING_LOOPED_LIMIT = 4096;
+// constexpr int MAXPOOLING_LOOPED_LIMIT = 4096;
 
 void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(inputs.size() == 1);
@@ -33,63 +36,57 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   };
 
   auto in = ensure_contiguous(inputs[0]);
-  if (in.flags().row_contiguous) {
-    out.set_data(allocator::malloc(out.nbytes()));
-  } else {
-    auto n = in.shape(-1);
-    auto flags = in.flags();
-    auto strides = in.strides();
-    for (auto& s : strides) {
-      s /= n;
-    }
-    bool col_contig = strides[0] == 1;
-    for (int i = 1; col_contig && i < strides.size(); ++i) {
-      col_contig &=
-          (out.shape(i) == 1 || strides[i - 1] == out.shape(i) * strides[i]);
-    }
-    flags.col_contiguous = col_contig;
-    out.set_data(
-        allocator::malloc(in.nbytes() / n),
-        in.data_size() / n,
-        std::move(strides),
-        flags);
-  }
+
+  assert(in.flags().row_contiguous);
+  out.set_data(allocator::malloc(out.nbytes()));
+
+  printf("[DEBUG ZWL] in.shape: %d, %d, %d, %d\n", in.shape(0), in.shape(1), in.shape(2), in.shape(3));
 
   int axis_size = in.shape().back();
+  printf("[DEBUG ZWL] axis_size: %d\n", axis_size);
   int n_rows = in.data_size() / axis_size;
+  printf("[DEBUG ZWL] n_rows: %d\n", n_rows);
+
+  int batch_size = in.shape(0);
+  int num_head = in.shape(1);
+  int q_len = in.shape(2);
+  int k_len = in.shape(3);
+  printf("[DEBUG ZWL] batch_size: %d, num_head: %d, q_len: %d, k_len: %d\n", batch_size, num_head, q_len, k_len);
 
   const int simd_size = 32;
   const int n_reads = 4;
-  const int looped_limit = MAXPOOLING_LOOPED_LIMIT;
+  // const int looped_limit = MAXPOOLING_LOOPED_LIMIT;
 
-  std::string kernel_name = (axis_size > looped_limit) ? "looped_" : "block_";
-  kernel_name += "maxpooling_";
+  // std::string kernel_name = (axis_size > looped_limit) ? "looped_" : "block_";
+  std::string kernel_name = "maxpooling_";
   kernel_name += type_to_name(out);
+
+  MaxPoolingParams params{
+    /* cache_len = */ cache_len_,
+    /* init_blocks = */ init_blocks_,
+    /* local_blocks = */ local_blocks_,
+    /* kernel_size = */ kernel_size_,
+    /* stride = */ stride_,
+    /* padding = */ padding_,
+    /* block_size = */ block_size_
+  };
 
   auto kernel = get_maxpooling_kernel(d, kernel_name, out);
   auto& compute_encoder = d.get_command_encoder(s.index);
   {
-    MTL::Size grid_dims, group_dims;
-    if (axis_size <= looped_limit) {
-      size_t threadgroup_needed = (axis_size + n_reads - 1) / n_reads;
-      size_t simds_needed = (threadgroup_needed + simd_size - 1) / simd_size;
-      size_t threadgroup_size = simd_size * simds_needed;
-      assert(threadgroup_size <= kernel->maxTotalThreadsPerThreadgroup());
-      size_t n_threads = n_rows * threadgroup_size;
-      grid_dims = MTL::Size(n_threads, 1, 1);
-      group_dims = MTL::Size(threadgroup_size, 1, 1);
-    } else {
-      size_t threadgroup_size = kernel->maxTotalThreadsPerThreadgroup();
-      size_t n_threads = n_rows * threadgroup_size;
-      grid_dims = MTL::Size(n_threads, 1, 1);
-      group_dims = MTL::Size(threadgroup_size, 1, 1);
-    }
+    size_t threadgroup_size = 128;
+
+    MTL::Size grid_dims = MTL::Size(q_len, num_head, 1);
+    MTL::Size group_dims = MTL::Size(threadgroup_size, 1, 1);
+
+    printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", q_len, num_head, 1);
+    printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", threadgroup_size, 1, 1);
 
     compute_encoder.set_compute_pipeline_state(kernel);
     compute_encoder.set_input_array(in, 0);
     compute_encoder.set_output_array(out, 1);
-    compute_encoder.set_bytes(axis_size, 2);
-    // compute_encoder.dispatch_threads(grid_dims, group_dims);
+    compute_encoder.set_bytes(params, 2);
+    compute_encoder.dispatch_threads(grid_dims, group_dims);
   }
 }
 
