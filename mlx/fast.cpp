@@ -794,6 +794,8 @@ array infllmv2_attention_stage1(
   bool has_arr_mask = false;
   bool has_bool_mask = false;
 
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " mask_mode: " << mask_mode << std::endl;
+
   if (mask_mode == "causal") {
     has_mask = true;
     do_causal = true;

@@ -236,12 +236,6 @@ template <
 
   int kb_lim = params->NK; // 8 iters over k
 
-  if (do_causal) {
-    int q_max = (tid.x + 1) * BQ + params->qL_off;
-    kb_lim = (q_max + BK - 1) / BK;
-    kb_lim = min(params->NK, kb_lim);
-  }
-
   // 1st Loop over KV seq length to prepare max and row sum for softmax
   for (int kb = 0; kb < kb_lim; kb++) { // 0, 1, 2, 3, 4, 5, 6, 7
     // Load K block and apply scale
@@ -293,21 +287,21 @@ template <
     }
 
     // Mask out if causal
-    if (do_causal && kb >= (kb_lim - ((BQ + BK - 1) / BK) - int(!align_K))) {
+    if (do_causal) {
       using stile_t = decltype(Stile);
       using selem_t = typename stile_t::elem_type;
       constexpr auto neg_inf = Limits<selem_t>::finite_min;
 
+      const int row_pos = /* start q pos of current block */ tidl.x * 2 + /* q offset of current thread */ simd_group_id / 2;
+
       STEEL_PRAGMA_UNROLL
       for (short i = 0; i < stile_t::kTileRows; i++) {
-        const int row_pos =
-            tid.x * BQ + params->qL_off + tm + sm + (i * stile_t::kFragRows);
         STEEL_PRAGMA_UNROLL
         for (short j = 0; j < stile_t::kTileCols; j++) {
           const int col_pos = kb * BK + sn + (j * stile_t::kFragCols);
           STEEL_PRAGMA_UNROLL
           for (short jj = 0; jj < stile_t::MMAFrag_t::kElemCols; jj++) {
-            if (row_pos < (col_pos + jj)) {
+            if (row_pos < 16 * (col_pos + jj) + 32 - 1) {
               Stile.frag_at(i, j)[jj] = neg_inf;
             }
           }
@@ -453,21 +447,21 @@ template <
     }
 
     // Mask out if causal
-    if (do_causal && kb >= (kb_lim - ((BQ + BK - 1) / BK) - int(!align_K))) {
+    if (do_causal) {
       using stile_t = decltype(Stile);
       using selem_t = typename stile_t::elem_type;
       constexpr auto neg_inf = Limits<selem_t>::finite_min;
 
+      const int row_pos = /* start q pos of current block */ tidl.x * 2 + /* q offset of current thread */ simd_group_id / 2;
+
       STEEL_PRAGMA_UNROLL
       for (short i = 0; i < stile_t::kTileRows; i++) {
-        const int row_pos =
-            tid.x * BQ + params->qL_off + tm + sm + (i * stile_t::kFragRows);
         STEEL_PRAGMA_UNROLL
         for (short j = 0; j < stile_t::kTileCols; j++) {
           const int col_pos = kb * BK + sn + (j * stile_t::kFragCols);
           STEEL_PRAGMA_UNROLL
           for (short jj = 0; jj < stile_t::MMAFrag_t::kElemCols; jj++) {
-            if (row_pos < (col_pos + jj)) {
+            if (row_pos < 16 * (col_pos + jj) + 32 - 1) {
               Stile.frag_at(i, j)[jj] = neg_inf;
             }
           }

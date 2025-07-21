@@ -43,14 +43,14 @@ def naive_infllmv2_attn_stage1_mlx(q, k, v, causal=False):
     return score
 
 def naive_infllmv2_attn_stage1_torch(q, k, v, causal=False):
-    k = k.repeat_interleave(q.shape[0] // k.shape[0], dim=0)
-    v = v.repeat_interleave(q.shape[0] // v.shape[0], dim=0)
+    k = k.repeat_interleave(q.shape[0] // k.shape[0], dim=0) # (2, 128, 128) -> (32, 128, 128)
+    v = v.repeat_interleave(q.shape[0] // v.shape[0], dim=0) # (2, 128, 128) -> (32, 128, 128)
     
-    attn = q @ k.transpose(-2, -1) / (q.size(-1) ** 0.5)
+    attn = q @ k.transpose(-2, -1) / (q.size(-1) ** 0.5) # (32, 2048, 128) @ (32, 128, 128) -> (32, 2048, 128)
     if causal:
-        causal_mask = torch.zeros(q.shape[1], k.shape[1], device=q.device).bool()
-        for i in range(q.shape[1]):
-            for j in range(k.shape[1]):
+        causal_mask = torch.zeros(q.shape[1], k.shape[1], device=q.device).bool() # (2048, 128)
+        for i in range(q.shape[1]): # 2048
+            for j in range(k.shape[1]): # 128
                 if i >= (j * 16 + 32 - 1):
                     causal_mask[i, j] = True
         attn = attn.masked_fill(~causal_mask, -float('inf'))
@@ -74,15 +74,23 @@ if __name__ == "__main__":
     k_torch = torch.from_numpy(k_npy.squeeze(0))
     v_torch = torch.from_numpy(v_npy.squeeze(0))
 
-    score_mlx = naive_infllmv2_attn_stage1_mlx(q_mlx, k_mlx, v_mlx, causal=False)
-    score_mlx_npy = np.array(score_mlx).squeeze(0)
-    print(score_mlx_npy.shape)
+    # score_mlx = naive_infllmv2_attn_stage1_mlx(q_mlx, k_mlx, v_mlx, causal=False)
+    # score_mlx_npy = np.array(score_mlx).squeeze(0)
+    # print(score_mlx_npy.shape)
     # exit()
     # score_mlx_npy = score_mlx_npy.reshape(NUM_ATTN_HEADS, Q_LEN // 16, 16, HEAD_DIM).sum(axis=-2)
     # print(score_mlx_npy.shape)
     # exit()
     # score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=False)
     # score_torch_npy = score_torch.numpy()
+    # print("....")
+
+    score_torch = naive_infllmv2_attn_stage1_torch(q_torch, k_torch, v_torch, causal=True)
+    score_torch_npy = score_torch.numpy()
+    # print(f"score_torch_npy.shape: {score_torch_npy.shape}")
+    # print(score_torch_npy[0, 0, :])
+    # print(score_torch_npy[0, -1, :])
+    # exit()
 
     # diff = np.abs(score_mlx_npy - score_torch_npy)
     # print("max |diff| between mlx and torch: ", diff.max())
@@ -90,14 +98,40 @@ if __name__ == "__main__":
 
     scale = float(1.0 / math.sqrt(HEAD_DIM))
 
-    o_mlx = mx.fast.infllmv2_attention_stage1(q_mlx, k_mlx, v_mlx, scale=scale)
-    print(f"o_mlx.shape: {o_mlx.shape}")
+    o_mlx = mx.fast.infllmv2_attention_stage1(q_mlx, k_mlx, v_mlx, scale=scale, mask="causal")
+    # print(f"o_mlx.shape: {o_mlx.shape}")
+    # print(f"o_mlx.min(): {o_mlx.min()}, o_mlx.max(): {o_mlx.max()}")
     # print(f"o_mlx.min(): {o_mlx.min()}, o_mlx.max(): {o_mlx.max()}")
     # exit()
 
     o_mlx_npy = np.array(o_mlx).squeeze(0)
-    print("o_mlx_npy.shape: ", o_mlx_npy.shape)
-    # exit()
+    # print("o_mlx_npy.shape: ", o_mlx_npy.shape)
+    # print(o_mlx_npy[0, 0, :])
+    # print()
+
+    for idx in range(Q_LEN):
+        diff = np.abs(score_torch_npy[0, idx, :] - o_mlx_npy[0, idx, :])
+        print(f"q: {idx:04d}, diff: {diff.max()}")
+
+    exit()
+    
+    idx = 1024
+    print(f"+------- gt q: {idx} ---------+")
+    print(score_torch_npy[0, idx, :])
+    print(f"+------- pred q: {idx} ---------+")
+    print(o_mlx_npy[0, idx, :])
+    print(f"+------- diff between gt and pred q: {idx} ---------+")
+    print(f"max diff: {np.abs(score_torch_npy[0, idx, :] - o_mlx_npy[0, idx, :]).max()}")
+
+    idx = 1024 + 512
+    print(f"+------- gt q: {idx} ---------+")
+    print(score_torch_npy[0, idx, :])
+    print(f"+------- pred q: {idx} ---------+")
+    print(o_mlx_npy[0, idx, :])
+    print(f"+------- diff between gt and pred q: {idx} ---------+")
+    print(f"max diff: {np.abs(score_torch_npy[0, idx, :] - o_mlx_npy[0, idx, :]).max()}")
+
+    exit()
     # print("pred zero elements: ", (o_mlx_npy == 0).sum(), "out of ", o_mlx_npy.size, "=", (o_mlx_npy == 0).sum() / o_mlx_npy.size)
     # print("gt zero elements: ", (score_mlx_npy == 0).sum(), "out of ", score_mlx_npy.size, "=", (score_mlx_npy == 0).sum() / score_mlx_npy.size)
     

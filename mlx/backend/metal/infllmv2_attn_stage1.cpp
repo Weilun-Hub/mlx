@@ -143,6 +143,8 @@ void infllmv2_attention_stage1_metal(
       /* int64_t K_strides[3] = */ {k.strides(0), k.strides(1), k.strides(2)},
       /* int64_t V_strides[3] = */ {v.strides(0), v.strides(1), v.strides(2)},
       /* int64_t O_strides[3] = */ {o.strides(0), o.strides(1), o.strides(2)}};
+    
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " : params.qL_off: " << params.qL_off << std::endl;
 
   compute_encoder.set_input_array(q, 0);
   compute_encoder.set_input_array(k, 1);
@@ -187,6 +189,9 @@ bool InfLLMV2AttentionStage1::use_fallback(
     bool has_arr_mask,
     bool do_causal,
     Stream s) {
+    
+  return false;
+
   if (detail::in_grad_tracing()) {
     return true;
   }
@@ -217,6 +222,8 @@ bool InfLLMV2AttentionStage1::use_fallback(
       sdpa_vector_supported_head_dim;
 
   std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " : !(supports_sdpa_full || supports_sdpa_vector): " << !(supports_sdpa_full || supports_sdpa_vector) << std::endl;
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " : supports_sdpa_full: " << supports_sdpa_full << std::endl;
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " : supports_sdpa_vector: " << supports_sdpa_vector << std::endl;
 
   return !(supports_sdpa_full || supports_sdpa_vector);
 }
