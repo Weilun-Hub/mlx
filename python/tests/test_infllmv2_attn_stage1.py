@@ -115,23 +115,23 @@ if __name__ == "__main__":
 
     exit()
     
-    idx = 1024
-    print(f"+------- gt q: {idx} ---------+")
-    print(score_torch_npy[0, idx, :])
-    print(f"+------- pred q: {idx} ---------+")
-    print(o_mlx_npy[0, idx, :])
-    print(f"+------- diff between gt and pred q: {idx} ---------+")
-    print(f"max diff: {np.abs(score_torch_npy[0, idx, :] - o_mlx_npy[0, idx, :]).max()}")
+    # idx = 0
+    # print(f"+------- gt q: {idx} ---------+")
+    # print(score_torch_npy[0, idx, :])
+    # print(f"+------- pred q: {idx} ---------+")
+    # print(o_mlx_npy[0, idx, :])
+    # print(f"+------- diff between gt and pred q: {idx} ---------+")
+    # print(f"max diff: {np.abs(score_torch_npy[0, idx, :] - o_mlx_npy[0, idx, :]).max()}")
 
-    idx = 1024 + 512
-    print(f"+------- gt q: {idx} ---------+")
-    print(score_torch_npy[0, idx, :])
-    print(f"+------- pred q: {idx} ---------+")
-    print(o_mlx_npy[0, idx, :])
-    print(f"+------- diff between gt and pred q: {idx} ---------+")
-    print(f"max diff: {np.abs(score_torch_npy[0, idx, :] - o_mlx_npy[0, idx, :]).max()}")
+    # idx = 1024 + 512
+    # print(f"+------- gt q: {idx} ---------+")
+    # print(score_torch_npy[0, idx, :])
+    # print(f"+------- pred q: {idx} ---------+")
+    # print(o_mlx_npy[0, idx, :])
+    # print(f"+------- diff between gt and pred q: {idx} ---------+")
+    # print(f"max diff: {np.abs(score_torch_npy[0, idx, :] - o_mlx_npy[0, idx, :]).max()}")
 
-    exit()
+    # exit()
     # print("pred zero elements: ", (o_mlx_npy == 0).sum(), "out of ", o_mlx_npy.size, "=", (o_mlx_npy == 0).sum() / o_mlx_npy.size)
     # print("gt zero elements: ", (score_mlx_npy == 0).sum(), "out of ", score_mlx_npy.size, "=", (score_mlx_npy == 0).sum() / score_mlx_npy.size)
     
