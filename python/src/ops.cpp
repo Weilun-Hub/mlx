@@ -2853,6 +2853,38 @@ void init_ops(nb::module_& m) {
             array: The top ``k`` elements from the input.
       )pbdoc");
   m.def(
+      "argtopk",
+      [](const mx::array& a,
+         int k,
+         std::optional<int> axis,
+         mx::StreamOrDevice s) {
+        if (axis) {
+          return mx::argtopk(a, k, *axis, s);
+        } else {
+          return mx::argtopk(a, k, s);
+        }
+      },
+      nb::arg(),
+      "k"_a,
+      "axis"_a.none() = -1,
+      nb::kw_only(),
+      "stream"_a = nb::none(),
+      nb::sig(
+          "def argtopk(a: array, /, k: int, axis: Union[None, int] = -1, *, stream: Union[None, Stream, Device] = None) -> array"),
+      R"pbdoc(
+        Returns the indices of the ``k`` largest elements from the input along a given axis.
+
+        Args:
+            a (array): Input array.
+            k (int): ``k`` top elements to be returned
+            axis (int or None, optional): Optional axis to select over.
+              If ``None``, this selects the top ``k`` elements over the
+              flattened array. If unspecified, it defaults to ``-1``.
+
+        Returns:
+            array: The top ``k`` elements from the input.
+      )pbdoc");
+  m.def(
       "broadcast_to",
       [](const ScalarOrArray& a, const mx::Shape& shape, mx::StreamOrDevice s) {
         return mx::broadcast_to(to_array(a), shape, s);

@@ -17,6 +17,8 @@
 #include "mlx/transforms_impl.h"
 #include "mlx/utils.h"
 
+#include <iostream>
+
 namespace mlx::core {
 
 namespace {
@@ -2356,11 +2358,66 @@ array topk(const array& a, int k, int axis, StreamOrDevice s /* = {}*/) {
     return a;
   }
 
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k = " << k << " axis = " << axis_ << std::endl;
+
   array a_partitioned = partition(a, -k, axis_, s);
+  // array a_partitioned = argpartition(a, -k, axis_, s);
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a_partitioned.shape() = " << a_partitioned.shape() << std::endl;
   Shape slice_starts(a.ndim(), 0);
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a.ndim() = " << a.ndim() << std::endl;
   auto slice_ends = a.shape();
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_ends = " << slice_ends << std::endl;
   slice_starts[axis_] = a.shape(axis_) - k;
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
   return slice(a_partitioned, slice_starts, slice_ends, s);
+}
+
+/** Returns topk elements of the flattened array. */
+array argtopk(const array& a, int k, StreamOrDevice s /* = {}*/) {
+  int size = a.size();
+  return argtopk(reshape(a, {size}, s), k, 0, s);
+}
+
+/** Returns topk elements of the array along a given axis. */
+array argtopk(const array& a, int k, int axis, StreamOrDevice s /* = {}*/) {
+  // Check for valid axis
+  int axis_ = axis < 0 ? axis + a.ndim() : axis;
+  if (axis_ < 0 || axis_ >= static_cast<int>(a.ndim())) {
+    std::ostringstream msg;
+    msg << "[topk] Received invalid axis " << axis << " for array with "
+        << a.ndim() << " dimensions.";
+    throw std::invalid_argument(msg.str());
+  }
+  if (k < 0 || k > a.shape(axis_)) {
+    std::ostringstream msg;
+    msg << "[topk] Received invalid k=" << k << " along axis " << axis
+        << " for array with shape: " << a.shape();
+    throw std::invalid_argument(msg.str());
+  }
+
+  // Return early if the whole input was requested.
+  if (k == a.shape(axis_)) {
+    return a;
+  }
+
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k = " << k << " axis = " << axis_ << std::endl;
+
+  // array a_partitioned = partition(a, -k, axis_, s);
+  array a_partitioned = argpartition(-a, k, axis_, s);
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a_partitioned.shape() = " << a_partitioned.shape() << std::endl;
+  Shape slice_starts(a.ndim(), 0);
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a.ndim() = " << a.ndim() << std::endl;
+  auto slice_ends = a.shape();
+  slice_ends[axis_] = k;
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_ends = " << slice_ends << std::endl;
+  // slice_starts[axis_] = a.shape(axis_) - k;
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
+  // sort(const array& a, int axis, StreamOrDevice s /* = {} */)
+  auto a_sliced = slice(a_partitioned, slice_starts, slice_ends, s);
+  return sort(a_sliced, axis_, s);
+  // return slice(a_partitioned, slice_starts, slice_ends, s);
 }
 
 array logsumexp(const array& a, bool keepdims, StreamOrDevice s /* = {}*/) {

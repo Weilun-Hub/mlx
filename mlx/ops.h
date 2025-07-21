@@ -715,6 +715,12 @@ array topk(const array& a, int k, StreamOrDevice s = {});
 /** Returns topk elements of the array along a given axis. */
 array topk(const array& a, int k, int axis, StreamOrDevice s = {});
 
+/** Returns indices of topk elements of the flattened array. */
+array argtopk(const array& a, int k, StreamOrDevice s = {});
+
+/** Returns indices of topk elements of the array along a given axis. */
+array argtopk(const array& a, int k, int axis, StreamOrDevice s = {});
+
 /** Cumulative logsumexp of an array. */
 array logcumsumexp(
     const array& a,

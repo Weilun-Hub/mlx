@@ -15,10 +15,15 @@ cd python/tests
 # echo "+-------------------------------------------+"
 # python python/tests/test_infllmv2_attn_stage1.py
 
+# echo "+-------------------------------------------+"
+# echo "|Running tests maxpooling                   |"
+# echo "+-------------------------------------------+"
+# python test_maxpooling.py
+
 echo "+-------------------------------------------+"
-echo "|Running tests maxpooling                   |"
+echo "|Running tests topk                         |"
 echo "+-------------------------------------------+"
-python test_maxpooling.py
+python test_topk.py
 
 echo "+-------------------------------------------+"
 echo "|Done!                                      |"
