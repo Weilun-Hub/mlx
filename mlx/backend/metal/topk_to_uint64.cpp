@@ -6,6 +6,7 @@
 #include "mlx/backend/metal/kernels.h"
 #include "mlx/backend/metal/utils.h"
 #include "mlx/primitives.h"
+#include "mlx/stream.h"
 #include <iostream>
 #include <cassert>
 #include "mlx/backend/metal/topk_to_uint64.h"
@@ -16,6 +17,7 @@ void TopkToUint64::eval_gpu(const std::vector<array>& inputs, array& out) {
 
   std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << std::endl;
   
+  assert(inputs[0].dtype() == int32);
   assert(inputs.size() == 1);
   if (!issubdtype(out.dtype(), uint64)) {
     throw std::runtime_error(
@@ -27,6 +29,7 @@ void TopkToUint64::eval_gpu(const std::vector<array>& inputs, array& out) {
   // Make sure that the last dimension is contiguous
   auto ensure_contiguous = [&s, &d](const array& x) {
     if (x.flags().contiguous && x.strides()[x.ndim() - 1] == 1) {
+      printf("[DEBUG ZWL] x.flags().contiguous && x.strides()[x.ndim() - 1] == 1\n");
       return x;
     } else {
       auto x_copy = array(x.shape(), x.dtype(), nullptr, {});
@@ -42,11 +45,7 @@ void TopkToUint64::eval_gpu(const std::vector<array>& inputs, array& out) {
   out.set_data(allocator::malloc(out.nbytes()));
 
   printf("[DEBUG ZWL] in.shape: %d, %d, %d, %d\n", in.shape(0), in.shape(1), in.shape(2), in.shape(3));
-
-  // int axis_size = in.shape().back();
-  // printf("[DEBUG ZWL] axis_size: %d\n", axis_size);
-  // int n_rows = in.data_size() / axis_size;
-  // printf("[DEBUG ZWL] n_rows: %d\n", n_rows);
+  printf("[DEBUG ZWL] in.shape: %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2));
 
   int batch_size = in.shape(0);
   int num_head = in.shape(1);
@@ -54,27 +53,28 @@ void TopkToUint64::eval_gpu(const std::vector<array>& inputs, array& out) {
   int k_len = in.shape(3);
   printf("[DEBUG ZWL] batch_size: %d, num_head: %d, q_len: %d, k_len: %d\n", batch_size, num_head, q_len, k_len);
 
-  const int simd_size = 32;
-
   std::string kernel_name = "topk_to_uint64_";
   kernel_name += type_to_name(out) + "_t";
 
   printf("[DEBUG ZWL] in.strides: %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2));
   printf("[DEBUG ZWL] out.strides: %d, %d, %d\n", out.strides(0), out.strides(1), out.strides(2));
-
+  printf("[DEBUG ZWL] max_seqlen_k_: %d, block_size_: %d\n", max_seqlen_k_, block_size_);
   int k_blocks = (max_seqlen_k_ + block_size_ - 1) / block_size_;
   printf("[DEBUG ZWL] k_blocks: %d\n", k_blocks);
   printf("[DEBUG ZWL] n_uint64_per_row: %d\n", out.shape(3));
 
-  const int flat_dims = batch_size * num_head * q_len;
+  int flat_dims = batch_size * num_head * q_len;
+  printf("[DEBUG ZWL] flat_dims: %d\n", flat_dims);
 
-  const int threadgroup_size = 128;
+  size_t threadgroup_size = 128;
 
-  const int blocks_per_row = (flat_dims + threadgroup_size - 1) / threadgroup_size;
+  int blocks_per_row = (flat_dims + threadgroup_size - 1) / threadgroup_size;
 
-  const int n_uint64_per_row = out.shape(3);
+  int n_uint64_per_row = out.shape(3);
+  printf("[DEBUG ZWL] n_uint64_per_row: %d\n", n_uint64_per_row);
 
-  const int k = in.shape(3);
+  int k = in.shape(3);
+  printf("[DEBUG ZWL] k: %d\n", k);
 
   TopkToUint64Params params{
     /* batch_size = */ flat_dims,
@@ -84,6 +84,9 @@ void TopkToUint64::eval_gpu(const std::vector<array>& inputs, array& out) {
     /* in_strides = */ {in.strides(0), in.strides(1), in.strides(2)},
     /* out_strides = */ {out.strides(0), out.strides(1), out.strides(2)}
   };
+
+  printf("[DEBUG ZWL] params.in_strides: %d, %d, %d\n", params.in_strides[0], params.in_strides[1], params.in_strides[2]);
+  printf("[DEBUG ZWL] params.out_strides: %d, %d, %d\n", params.out_strides[0], params.out_strides[1], params.out_strides[2]);
 
   auto kernel = get_topk_to_uint64_kernel(d, kernel_name, out);
   auto& compute_encoder = d.get_command_encoder(s.index);
