@@ -8,6 +8,7 @@
 #include "mlx/primitives.h"
 #include <iostream>
 #include <cassert>
+#include "mlx/backend/metal/topk_to_uint64.h"
 
 namespace mlx::core {
 
@@ -56,40 +57,50 @@ void TopkToUint64::eval_gpu(const std::vector<array>& inputs, array& out) {
   const int simd_size = 32;
 
   std::string kernel_name = "topk_to_uint64_";
-  kernel_name += type_to_name(out);
+  kernel_name += type_to_name(out) + "_t";
 
   printf("[DEBUG ZWL] in.strides: %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2));
   printf("[DEBUG ZWL] out.strides: %d, %d, %d\n", out.strides(0), out.strides(1), out.strides(2));
 
-  // MaxPoolingParams params{
-  //   /* cache_len = */ cache_len_,
-  //   /* init_blocks = */ init_blocks_,
-  //   /* local_blocks = */ local_blocks_,
-  //   /* kernel_size = */ kernel_size_,
-  //   /* stride = */ stride_,
-  //   /* padding = */ padding_,
-  //   /* block_size = */ block_size_,
-  //   /* in_strides = */ {in.strides(0), in.strides(1), in.strides(2)},
-  //   /* out_strides = */ {out.strides(0), out.strides(1), out.strides(2)}
-  // };
+  int k_blocks = (max_seqlen_k_ + block_size_ - 1) / block_size_;
+  printf("[DEBUG ZWL] k_blocks: %d\n", k_blocks);
+  printf("[DEBUG ZWL] n_uint64_per_row: %d\n", out.shape(3));
 
-  // auto kernel = get_maxpooling_kernel(d, kernel_name, out);
-  // auto& compute_encoder = d.get_command_encoder(s.index);
-  // {
-  //   size_t threadgroup_size = 128;
+  const int flat_dims = batch_size * num_head * q_len;
 
-  //   MTL::Size grid_dims = MTL::Size(q_len, num_head, 1);
-  //   MTL::Size group_dims = MTL::Size(threadgroup_size, 1, 1);
+  const int threadgroup_size = 128;
 
-  //   printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", q_len, num_head, 1);
-  //   printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", threadgroup_size, 1, 1);
+  const int blocks_per_row = (flat_dims + threadgroup_size - 1) / threadgroup_size;
 
-  //   compute_encoder.set_compute_pipeline_state(kernel);
-  //   compute_encoder.set_input_array(in, 0);
-  //   compute_encoder.set_output_array(out, 1);
-  //   compute_encoder.set_bytes(params, 2);
-  //   compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
-  // }
+  const int n_uint64_per_row = out.shape(3);
+
+  const int k = in.shape(3);
+
+  TopkToUint64Params params{
+    /* batch_size = */ flat_dims,
+    /* k = */ k,
+    /* k_blocks = */ k_blocks,
+    /* n_uint64_per_row = */ n_uint64_per_row,
+    /* in_strides = */ {in.strides(0), in.strides(1), in.strides(2)},
+    /* out_strides = */ {out.strides(0), out.strides(1), out.strides(2)}
+  };
+
+  auto kernel = get_topk_to_uint64_kernel(d, kernel_name, out);
+  auto& compute_encoder = d.get_command_encoder(s.index);
+  {
+
+    MTL::Size grid_dims = MTL::Size(blocks_per_row, n_uint64_per_row, 1);
+    MTL::Size group_dims = MTL::Size(threadgroup_size, 1, 1);
+
+    printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", blocks_per_row, n_uint64_per_row, 1);
+    printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", threadgroup_size, 1, 1);
+
+    compute_encoder.set_compute_pipeline_state(kernel);
+    compute_encoder.set_input_array(in, 0);
+    compute_encoder.set_output_array(out, 1);
+    compute_encoder.set_bytes(params, 2);
+    compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
+  }
 }
 
 } // namespace mlx::core

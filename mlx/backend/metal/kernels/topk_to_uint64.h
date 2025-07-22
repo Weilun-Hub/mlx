@@ -1,50 +1,47 @@
 // Copyright © 2025 Apple Inc.
 
-// #include "mlx/backend/metal/maxpooling.h"
+#include "mlx/backend/metal/topk_to_uint64.h"
 
-// using mlx::core::MaxPoolingParams;
+using mlx::core::TopkToUint64Params;
 
-template <typename T, int THREADGROUP_SIZE = 128>
+template <int THREADGROUP_SIZE = 128>
 [[kernel, max_total_threads_per_threadgroup(THREADGROUP_SIZE)]] void topk_to_uint64(
-    const device T* in [[buffer(0)]],
-    device T* out [[buffer(1)]],
-    // const constant MaxPoolingParams* params [[buffer(2)]],
+    const device int32_t* in [[buffer(0)]],
+    device uint64_t* out [[buffer(1)]],
+    const constant TopkToUint64Params* params [[buffer(2)]],
     uint simd_lane_id [[thread_index_in_simdgroup]],
     uint simd_group_id [[simdgroup_index_in_threadgroup]],
     uint3 gid [[threadgroup_position_in_grid]],
     uint3 lid [[thread_position_in_threadgroup]]) {
   (void)lid;
   
-  ulong3 tidl{gid.x, gid.y, gid.z}; // #q, #head, #batch
+  ulong3 tidl{gid.x, gid.y, gid.z}; // #blocks_per_row, #n_uint64_per_row, 1
   int tid = lid.x;
 
-  // const device T* in_ptr = in + tidl.z * params->in_strides[0] + tidl.y * params->in_strides[1] + tidl.x * params->in_strides[2];
-  // device T* out_ptr = out + tidl.z * params->out_strides[0] + tidl.y * params->out_strides[1] + tidl.x * params->out_strides[2];
+  int row = gid.x * THREADGROUP_SIZE + simd_group_id * 32 + simd_lane_id;
+  int col = gid.y;
 
-  // int q_block = (tidl.x + params->cache_len) / params->block_size;
+  if ((row >= params->batch_size) || (col >= params->n_uint64_per_row)) {
+    return;
+  }
 
-  // constexpr auto neg_inf = Limits<T>::finite_min;
-  // constexpr auto pos_inf = Limits<T>::finite_max;
+  int out_idx = row * params->n_uint64_per_row + col;
 
-  // for (int k = tid; k < params->out_strides[2]; k += THREADGROUP_SIZE) {
-  //   int start = k * params->stride - params->padding;
-  //   int end = start + params->kernel_size;
-  //   start = start > 0 ? start : 0;
-  //   end = end < params->in_strides[2] ? end : params->in_strides[2];
+  int bit_start = col * 64;
+  uint64_t packed_value = 0;
 
-  //   T max_val = -1;
-  //   if (k < params->init_blocks) {
-  //     max_val = pos_inf;
-  //   } else if (q_block - params->local_blocks < k) {
-  //     max_val = neg_inf;
-  //   } else {
-  //     max_val = in_ptr[start];
-  //     for (int i = start + 1; i < end; i++) {
-  //       if (in_ptr[i] > max_val) {
-  //         max_val = in_ptr[i];
-  //       }
-  //     }
-  //   }
-  //   out_ptr[k] = max_val;
-  // }
+  for (int i = 0; i < params->k; ++i) {
+    int idx_offset = row * params->k + i;
+    int idx = in[idx_offset];
+    if (idx == -1) {
+      continue;
+    }
+
+    if (idx >= bit_start && idx < bit_start + 64) {
+      int local_bit = idx - bit_start;
+      packed_value |= (1ULL << local_bit);
+    }
+  }
+
+  out[out_idx] = packed_value;
 }

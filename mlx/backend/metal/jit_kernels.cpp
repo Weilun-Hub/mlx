@@ -341,13 +341,14 @@ MTL::ComputePipelineState* get_topk_to_uint64_kernel(
     const std::string& kernel_name,
     const array& out) {
   std::string lib_name = kernel_name.substr(kernel_name.find("_") + 1);
+  printf("[DEBUG ZWL] lib_name: %s\n", lib_name.c_str());
   auto lib = d.get_library(lib_name, [&] {
     auto t_str = get_type_string(out.dtype());
     std::string kernel_source;
     kernel_source = metal::utils();
     kernel_source += metal::topk_to_uint64();
-    kernel_source +=
-        get_template_definition("block_" + lib_name, "topk_to_uint64", t_str);
+    // kernel_source +=
+    //     get_template_definition("block_" + lib_name, "topk_to_uint64", t_str);
     // kernel_source += get_template_definition(
     //     "looped_" + lib_name, "topk_to_uint64_looped", t_str);
     return kernel_source;
