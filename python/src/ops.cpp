@@ -2494,6 +2494,32 @@ void init_ops(nb::module_& m) {
             array: The output array with max pooling applied.
       )pbdoc");
   m.def(
+      "topk_to_uint64",
+      [](const mx::array& a, // topk_idx
+         int max_seqlen_k,
+         int block_size,
+         mx::StreamOrDevice s) {
+        return mx::topk_to_uint64(a, max_seqlen_k, block_size, s);
+      },
+      nb::arg(),
+      "max_seqlen_k"_a = nb::none(),
+      "block_size"_a = nb::none(),
+      nb::kw_only(),
+      "stream"_a = nb::none(),
+      nb::sig(
+          "def topk_to_uint64(a: array, /, max_seqlen_k: int = None, block_size: int = None, stream: Union[None, Stream, Device] = None) -> array"),
+      R"pbdoc(
+        Convert topk indices to uint64.
+
+        Args:
+            a (array): Input array.
+            max_seqlen_k (int): Maximum sequence length of the key.
+            block_size (int): Block size.
+
+        Returns:
+            array: The output array with max pooling applied.
+      )pbdoc");
+  m.def(
       "mean",
       [](const mx::array& a,
          const IntOrVec& axis,

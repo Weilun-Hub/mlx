@@ -49,6 +49,7 @@ if(MLX_METAL_JIT)
   make_jit_source(fft kernels/fft/radix.h kernels/fft/readwrite.h)
   make_jit_source(logsumexp)
   make_jit_source(maxpooling)
+  make_jit_source(topk_to_uint64)
   make_jit_source(ternary)
   make_jit_source(softmax)
   make_jit_source(scan)
@@ -102,6 +103,7 @@ target_sources(
           ${CMAKE_CURRENT_SOURCE_DIR}/indexing.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/logsumexp.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/maxpooling.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/topk_to_uint64.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/matmul.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/scaled_dot_product_attention.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/infllmv2_attn_stage1.cpp

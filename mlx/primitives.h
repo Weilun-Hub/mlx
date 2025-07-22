@@ -1422,6 +1422,29 @@ class MaxPooling : public UnaryPrimitive {
   int block_size_;
 };
 
+class TopkToUint64 : public UnaryPrimitive {
+ public:
+  explicit TopkToUint64(Stream stream, int max_seqlen_k, int block_size) : UnaryPrimitive(stream), max_seqlen_k_(max_seqlen_k), block_size_(block_size) {}
+
+  void eval_cpu(const std::vector<array>& inputs, array& out) override;
+  void eval_gpu(const std::vector<array>& inputs, array& out) override;
+
+  DEFINE_VMAP()
+  DEFINE_GRADS()
+  DEFINE_PRINT(TopkToUint64)
+  DEFINE_DEFAULT_IS_EQUIVALENT()
+  std::vector<Shape> output_shapes(const std::vector<array>& inputs) override;
+  
+  // Add state method for serialization
+  std::tuple<int, int> state() const {
+    return {max_seqlen_k_, block_size_};
+  }
+
+ private:
+  int max_seqlen_k_;
+  int block_size_;
+};
+
 class Matmul : public UnaryPrimitive {
  public:
   explicit Matmul(Stream stream) : UnaryPrimitive(stream) {}

@@ -2517,6 +2517,41 @@ array maxpooling(
   return out;
 }
 
+array topk_to_uint64(
+    const array& a,
+    int max_seqlen_k,
+    int block_size,
+    StreamOrDevice s /* = {} */) {
+  if (a.size() == 0) {
+    throw std::invalid_argument("[topk_to_uint64] Received empty array.");
+  }
+
+  if (a.ndim() != 4) {
+    throw std::invalid_argument("[topk_to_uint64] Received array with " + std::to_string(a.ndim()) + " dimensions, expected 4.");
+  }
+
+  int batch = a.shape(0);
+  int num_head = a.shape(1);
+  int seq_len = a.shape(2);
+  int k = a.shape(3);
+
+  int k_blocks = (max_seqlen_k + block_size - 1) / block_size;
+  int last_dim = (k_blocks + 64 - 1) / 64;
+
+  auto dtype = uint64;
+  auto out_shape = {batch, num_head, seq_len, last_dim};
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " out_shape = " << out_shape << std::endl;
+  auto out = array(
+      std::move(out_shape),
+      dtype,
+      std::make_shared<TopkToUint64>(
+        to_stream(s),
+        max_seqlen_k,
+        block_size),
+      {astype(a, dtype, s)});
+  return out;
+}
+
 array abs(const array& a, StreamOrDevice s /* = {} */) {
   auto out =
       array(a.shape(), a.dtype(), std::make_shared<Abs>(to_stream(s)), {a});

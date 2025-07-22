@@ -84,3 +84,14 @@ if __name__ == "__main__":
     print(f"uint64_np.min(): {uint64_np.min()}, uint64_np.max(): {uint64_np.max()}")
 
     print(f"last_dim_np: {last_dim_np}")
+    a = mx.array(1, dtype=mx.uint64)
+    print(f"a.dtype: {a.dtype}")
+    print(f"a.shape: {a.shape}")
+    print(f"a.min(): {a.min()}, a.max(): {a.max()}")
+
+    topk_idx = mx.array(topk_idx_cpu, dtype=mx.int32)
+    a = mx.topk_to_uint64(topk_idx, max_seqlen_k, block_size)
+    print(f"a.shape: {a.shape}")
+    print(f"a.min(): {a.min()}, a.max(): {a.max()}")
+
+    exit()

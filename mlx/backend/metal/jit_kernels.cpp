@@ -336,6 +336,25 @@ MTL::ComputePipelineState* get_maxpooling_kernel(
   return d.get_kernel(kernel_name, lib);
 }
 
+MTL::ComputePipelineState* get_topk_to_uint64_kernel(
+    metal::Device& d,
+    const std::string& kernel_name,
+    const array& out) {
+  std::string lib_name = kernel_name.substr(kernel_name.find("_") + 1);
+  auto lib = d.get_library(lib_name, [&] {
+    auto t_str = get_type_string(out.dtype());
+    std::string kernel_source;
+    kernel_source = metal::utils();
+    kernel_source += metal::topk_to_uint64();
+    kernel_source +=
+        get_template_definition("block_" + lib_name, "topk_to_uint64", t_str);
+    // kernel_source += get_template_definition(
+    //     "looped_" + lib_name, "topk_to_uint64_looped", t_str);
+    return kernel_source;
+  });
+  return d.get_kernel(kernel_name, lib);
+}
+
 MTL::ComputePipelineState* get_scan_kernel(
     metal::Device& d,
     const std::string& kernel_name,

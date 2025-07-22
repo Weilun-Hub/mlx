@@ -760,6 +760,12 @@ array maxpooling(
     int block_size = 64,
     StreamOrDevice s = {});
 
+array topk_to_uint64(
+    const array& a,
+    int max_seqlen_k,
+    int block_size,
+    StreamOrDevice s = {});
+
 /** Absolute value of elements in an array. */
 array abs(const array& a, StreamOrDevice s = {});
 

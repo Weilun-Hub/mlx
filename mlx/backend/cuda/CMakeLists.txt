@@ -27,6 +27,7 @@ target_sources(
           ${CMAKE_CURRENT_SOURCE_DIR}/layer_norm.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/logsumexp.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/maxpooling.cu
+          ${CMAKE_CURRENT_SOURCE_DIR}/topk_to_uint64.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/primitives.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/random.cu
           ${CMAKE_CURRENT_SOURCE_DIR}/reduce.cu

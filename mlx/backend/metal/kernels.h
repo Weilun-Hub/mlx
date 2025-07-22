@@ -69,6 +69,11 @@ MTL::ComputePipelineState* get_maxpooling_kernel(
     const std::string& kernel_name,
     const array& out);
 
+MTL::ComputePipelineState* get_topk_to_uint64_kernel(
+    metal::Device& d,
+    const std::string& kernel_name,
+    const array& out);
+
 MTL::ComputePipelineState* get_scan_kernel(
     metal::Device& d,
     const std::string& kernel_name,
