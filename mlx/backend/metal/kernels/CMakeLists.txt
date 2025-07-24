@@ -86,6 +86,8 @@ set(STEEL_ATTN_HEADERS
     steel/utils/type_traits.h
     steel/utils/integral_constant.h
     steel/attn/attn.h
+    steel/attn/block_info.h
+    steel/attn/block_mask.h
     steel/attn/loader.h
     steel/attn/mma.h
     steel/attn/params.h
