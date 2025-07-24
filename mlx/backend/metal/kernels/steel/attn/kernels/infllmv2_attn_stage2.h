@@ -78,10 +78,11 @@ template <
     const device T* Q [[buffer(0)]],
     const device T* K [[buffer(1)]],
     const device T* V [[buffer(2)]],
-    device T* O [[buffer(3)]],
-    const constant InfLLMV2AttnStage2Params* params [[buffer(4)]],
-    const constant AttnMaskParams* mask_params [[buffer(5), function_constant(has_mask)]],
-    const device MaskType* mask [[buffer(6), function_constant(has_mask)]],
+    const device uint64_t* blockmask [[buffer(3)]],
+    device T* O [[buffer(4)]],
+    const constant InfLLMV2AttnStage2Params* params [[buffer(5)]],
+    const constant AttnMaskParams* mask_params [[buffer(6), function_constant(has_mask)]],
+    const device MaskType* mask [[buffer(7), function_constant(has_mask)]],
     uint simd_lane_id [[thread_index_in_simdgroup]],
     uint simd_group_id [[simdgroup_index_in_threadgroup]],
     uint3 tid [[threadgroup_position_in_grid]],
@@ -92,6 +93,8 @@ template <
 
   // Move to correct block
   ulong3 tidl{tid.x, tid.y, tid.z};
+
+  
 
   // Q += tidl.z * params->Q_strides[0] + // Batch
   //     tidl.y * params->Q_strides[1] + // Head

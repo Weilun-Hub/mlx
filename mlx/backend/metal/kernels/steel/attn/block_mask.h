@@ -95,7 +95,7 @@ struct BlockMask {
           result = highest_bit + (i * 64);
           break;
         }
-      } 
+      }
     }
 
     if (target > k_window_right && result <= k_window_right && k_window_left <= k_window_right) { return k_window_right; }

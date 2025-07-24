@@ -168,8 +168,9 @@ void infllmv2_attention_stage2_metal(
   compute_encoder.set_input_array(q, 0);
   compute_encoder.set_input_array(k, 1);
   compute_encoder.set_input_array(v, 2);
-  compute_encoder.set_output_array(o, 3);
-  compute_encoder.set_bytes(params, 4);
+  compute_encoder.set_input_array(blockmask_uint64, 3);
+  compute_encoder.set_output_array(o, 4);
+  compute_encoder.set_bytes(params, 5);
 
   if (mask) {
     printf("[DEBUG ZWL] mask exists\n");
