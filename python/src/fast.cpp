@@ -327,6 +327,133 @@ void init_fast(nb::module_& parent_module) {
             out = mx.fast.scaled_dot_product_attention(q, k, v, scale=scale, mask="causal")
       )pbdoc");
 
+    m.def(
+      "infllmv2_attention_stage2",
+      [](const mx::array& queries,
+         const mx::array& keys,
+         const mx::array& values,
+         const mx::array& cu_seqlens_q,
+         const mx::array& cu_seqlens_k,
+         const int max_seqlen_q,
+         const int max_seqlen_k,
+         const int window_size_left,
+         const int window_size_right,
+         const mx::array& blockmask_uint64,
+         const int block_window_size,
+         const float scale,
+         const std::variant<std::monostate, std::string, mx::array>& mask,
+         mx::StreamOrDevice s) {
+        bool has_mask = !std::holds_alternative<std::monostate>(mask);
+        bool has_str_mask =
+            has_mask && std::holds_alternative<std::string>(mask);
+        bool has_arr_mask = has_mask && std::holds_alternative<mx::array>(mask);
+
+        std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " infllmv2_attention_stage2" << std::endl;
+
+        if (has_mask) {
+          if (has_str_mask) {
+            auto mask_str = std::get<std::string>(mask);
+            if (mask_str != "causal") {
+              std::ostringstream msg;
+              msg << "[infllmv2_attention_stage2] invalid mask option '"
+                  << mask_str << "'. Must be 'causal', or an array.";
+              throw std::invalid_argument(msg.str());
+            }
+            return mx::fast::infllmv2_attention_stage2(
+                queries, keys, values, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, block_window_size, scale, mask_str, {}, s);
+          } else {
+            auto mask_arr = std::get<mx::array>(mask);
+            return mx::fast::infllmv2_attention_stage2(
+                queries, keys, values, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, block_window_size, scale, "", {mask_arr}, s);
+          }
+
+        } else {
+          std::cout << "[DEBUG ZWL] " << __FILE__ << ":" << __LINE__ << " infllmv2_attention_stage2 no mask" << std::endl;
+          return mx::fast::infllmv2_attention_stage2(
+              queries, keys, values, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, block_window_size, scale, "", {}, s);
+        }
+      },
+      "q"_a,
+      "k"_a,
+      "v"_a,
+      "cu_seqlens_q"_a,
+      "cu_seqlens_k"_a,
+      "max_seqlen_q"_a,
+      "max_seqlen_k"_a,
+      "window_size_left"_a,
+      "window_size_right"_a,
+      "blockmask_uint64"_a,
+      "block_window_size"_a,
+      nb::kw_only(),
+      "scale"_a,
+      "mask"_a = nb::none(),
+      "stream"_a = nb::none(),
+      nb::sig(
+          "def infllmv2_attention_stage2(q: array, k: array, v: array, cu_seqlens_q: array, cu_seqlens_k: array, max_seqlen_q: int, max_seqlen_k: int, window_size_left: int, window_size_right: int, blockmask_uint64: array, block_window_size: int, *, scale: float,  mask: Union[None, str, array] = None, stream: Union[None, Stream, Device] = None) -> array"),
+      R"pbdoc(
+        A fast implementation of multi-head attention: ``O = softmax(Q @ K.T, dim=-1) @ V``.
+
+        Supports:
+
+        * `Multi-Head Attention <https://arxiv.org/abs/1706.03762>`_
+        * `Grouped Query Attention <https://arxiv.org/abs/2305.13245>`_
+        * `Multi-Query Attention <https://arxiv.org/abs/1911.02150>`_
+
+        .. note::
+
+          * The softmax operation is performed in ``float32`` regardless of
+            the input precision.
+          * For Grouped Query Attention and Multi-Query Attention, the ``k``
+            and ``v`` inputs should not be pre-tiled to match ``q``.
+
+        In the following the dimensions are given by:
+
+        * ``B``: The batch size.
+        * ``N_q``: The number of query heads.
+        * ``N_kv``: The number of key and value heads.
+        * ``T_q``: The number of queries per example.
+        * ``T_kv``: The number of keys and values per example.
+        * ``D``: The per-head dimension.
+
+        Args:
+            q (array): Queries with shape ``[B, N_q, T_q, D]``.
+            k (array): Keys with shape ``[B, N_kv, T_kv, D]``.
+            v (array): Values with shape ``[B, N_kv, T_kv, D]``.
+            cu_seqlens_q (array): Cumulative sequence lengths for queries with shape ``[B + 1]``.
+            cu_seqlens_k (array): Cumulative sequence lengths for keys with shape ``[B + 1]``.
+            max_seqlen_q (int): Maximum sequence length for queries.
+            max_seqlen_k (int): Maximum sequence length for keys.
+            window_size_left (int): Left window size for local attention.
+            window_size_right (int): Right window size for local attention.
+            blockmask_uint64 (array): Blockmask with shape ``[B, N, T_q, T_kv]``.
+            block_window_size (int): Block window size.
+            scale (float): Scale for queries (typically ``1.0 / sqrt(q.shape(-1)``)
+            mask (Union[None, str, array], optional): The mask to apply to the
+               query-key scores. The mask can be an array or a string indicating
+               the mask type. The only supported string type is ``"causal"``. If
+               the mask is an array it can be a boolean or additive mask. The mask
+               can have at most 4 dimensions and must be broadcast-compatible with
+               the shape ``[B, N, T_q, T_kv]``. If an additive mask is given its
+               type must promote to the promoted type of ``q``, ``k``, and ``v``.
+        Returns:
+            array: The output array.
+
+        Example:
+
+          .. code-block:: python
+
+            B = 2
+            N_q = N_kv = 32
+            T_q = T_kv = 1000
+            D = 128
+
+            q = mx.random.normal(shape=(B, N_q, T_q, D))
+            k = mx.random.normal(shape=(B, N_kv, T_kv, D))
+            v = mx.random.normal(shape=(B, N_kv, T_kv, D))
+            scale = D ** -0.5
+            out = mx.fast.scaled_dot_product_attention(q, k, v, scale=scale, mask="causal")
+      )pbdoc");
+
   m.def(
       "metal_kernel",
       [](const std::string& name,

@@ -18,6 +18,7 @@ venv/
 python/mlx/core
 python/mlx/share
 python/mlx/include
+python/tests/data
 .Python
 build/
 develop-eggs/

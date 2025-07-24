@@ -973,6 +973,179 @@ bool InfLLMV2AttentionStage1::is_equivalent(const Primitive& other) const {
   return scale_ == a_other.scale_ && do_causal_ == a_other.do_causal_;
 }
 
+/** Computes: O = softmax(Q @ K.T) @ V **/
+array infllmv2_attention_stage2(
+    const array& queries, // batch_size, num_attn_head, seq_len_q, head_dim
+    const array& keys, // batch_size, num_key_value_head, seq_len_k, head_dim
+    const array& values, // batch_size, num_key_value_head, seq_len_k, head_dim
+    const array& cu_seqlens_q,
+    const array& cu_seqlens_k,
+    const int max_seqlen_q,
+    const int max_seqlen_k,
+    const int window_size_left,
+    const int window_size_right,
+    const array& blockmask_uint64,
+    const int block_window_size,
+    const float scale,
+    const std::string& mask_mode /* = "" */,
+    const std::vector<array>& mask_arrs /* = {} */,
+    StreamOrDevice s /* = {}*/) {
+  for (const auto& tensor : {queries, keys, values}) {
+    if (tensor.ndim() != 4) {
+      std::ostringstream msg;
+      msg << "[infllmv2_attention_stage2] input with shape "
+          << tensor.shape() << " expected to be rank 4";
+      throw std::invalid_argument(msg.str());
+    }
+  }
+  // Check valid mask
+  if (mask_mode != "" && mask_mode != "causal" && mask_mode != "array") {
+    std::ostringstream msg;
+    msg << "[infllmv2_attention_stage2] Invalid mask_mode " << mask_mode
+        << ". mask_mode must be 'causal', 'array' or ''.";
+    throw std::invalid_argument(msg.str());
+  }
+
+  bool do_causal = false;
+  bool has_mask = false;
+  bool has_arr_mask = false;
+  bool has_bool_mask = false;
+
+  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " mask_mode: " << mask_mode << std::endl;
+
+  if (mask_mode == "causal") {
+    has_mask = true;
+    do_causal = true;
+
+    if (!mask_arrs.empty()) {
+      std::ostringstream msg;
+      msg << "[infllmv2_attention_stage2] Invalid mask_arrs for mask_mode "
+          << "'casusal'. No array masks supported.";
+      throw std::invalid_argument(msg.str());
+    }
+  }
+
+  if (mask_mode == "array" || (mask_mode == "" && !mask_arrs.empty())) {
+    if (mask_arrs.size() != 1) {
+      std::ostringstream msg;
+      msg << "[infllmv2_attention_stage2] Invalid mask_arrs for mask_mode "
+          << "'" << mask_mode << "'. Only 1 mask array is supported, got "
+          << mask_arrs.size() << "arrays.";
+      throw std::invalid_argument(msg.str());
+    }
+
+    has_mask = true;
+    has_arr_mask = true;
+    has_bool_mask = mask_arrs[0].dtype() == bool_;
+  }
+
+  if (has_arr_mask && (mask_arrs[0]).ndim() > 4) {
+    std::ostringstream msg;
+    msg << "[infllmv2_attention_stage2] the mask with shape "
+        << mask_arrs[0].shape() << " expected to have at most rank 4.";
+    throw std::invalid_argument(msg.str());
+  }
+
+  const size_t batch_dim = queries.shape(0);
+  for (const auto& tensor : {keys, values}) {
+    if (tensor.shape(0) != batch_dim) {
+      std::ostringstream msg;
+      msg << "[infllmv2_attention_stage2] mismatching batch dimension for input with shape "
+          << tensor.shape() << ".";
+      throw std::invalid_argument(msg.str());
+    }
+  }
+
+  // Q, K must have matching last dims (d_k aka 'head_dim');
+  if (queries.shape(-1) != keys.shape(-1)) {
+    std::ostringstream msg;
+    msg << "[infllmv2_attention_stage2] query, keys expected to have matching last dimension; found query shape "
+        << queries.shape() << " for keys shape " << keys.shape() << ".";
+    throw std::invalid_argument(msg.str());
+  }
+
+  // K, V must have matching number of heads (n_kv_heads);
+  auto n_q_heads = queries.shape(-3);
+  auto n_kv_heads = keys.shape(-3);
+
+  if (keys.shape(-3) != values.shape(-3)) {
+    std::ostringstream msg;
+    msg << "[infllmv2_attention_stage2] keys, values expected to have matching n_kv_heads; found keys with n_heads "
+        << keys.shape(-3) << " for values with n_heads " << values.shape(-3)
+        << ".";
+    throw std::invalid_argument(msg.str());
+  }
+
+  // n_heads % n_kv_heads == 0; n_heads >= 1, n_kv_heads >= 1.
+  if (n_q_heads % n_kv_heads != 0) {
+    std::ostringstream msg;
+    msg << "[infllmv2_attention_stage2] n_heads must be a multiple of n_kv_heads, found n_heads "
+        << n_q_heads << " for n_kv_heads " << n_kv_heads << ".";
+    throw std::invalid_argument(msg.str());
+  }
+
+  auto final_type = result_type(queries, keys, values);
+  if (!issubdtype(final_type, floating)) {
+    std::ostringstream msg;
+    msg << "[infllmv2_attention_stage2] Received unsupported type "
+        << final_type << ".";
+    throw std::invalid_argument(msg.str());
+  }
+
+  auto q = astype(queries, final_type, s); // 1, 32, 204
+  auto k = astype(keys, final_type, s);
+  auto v = astype(values, final_type, s);
+
+  auto fallback = [scale, final_type, n_q_heads, n_kv_heads, do_causal, s](
+                      const std::vector<array>& inputs) {
+    auto q = inputs[0];
+    auto k = inputs[1];
+    auto v = inputs[2];
+    
+    auto out = array(Shape{q.shape(0), q.shape(1), q.shape(2), v.shape(-1)}, final_type, nullptr, {});
+    
+    return std::vector<array>{out};
+  };
+
+  auto stream = to_stream(s);
+  std::vector<array> inputs = {q, k, v};
+  if (has_arr_mask) {
+    // Check type
+    auto mask_arr = mask_arrs[0];
+    has_bool_mask = mask_arr.dtype() == bool_;
+    if (promote_types(mask_arr.dtype(), final_type) != final_type) {
+      std::ostringstream msg;
+      msg << "[infllmv2_attention_stage2] Mask type must promote to output type. "
+          << final_type << ".";
+      throw std::invalid_argument(msg.str());
+    } else if (!has_bool_mask) {
+      mask_arr = astype(mask_arr, final_type, stream);
+    }
+    // Broadcast mask
+    auto mask_shape = queries.shape();
+    mask_shape.back() = keys.shape(-2);
+    inputs.push_back(broadcast_to(mask_arr, mask_shape, stream));
+  }
+  if (!InfLLMV2AttentionStage2::use_fallback(
+          q, k, v, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, block_window_size, has_mask, has_arr_mask, do_causal, stream)) {
+    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage2::use_fallback false" << std::endl;
+    auto out_shape = Shape{q.shape(0), q.shape(1), q.shape(2), v.shape(-1)};
+    return array(
+        std::move(out_shape),
+        final_type,
+        std::make_shared<InfLLMV2AttentionStage2>(
+            stream, fallback, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, block_window_size, scale, do_causal),
+        std::move(inputs));
+  }
+  return fallback(std::move(inputs))[0];
+}
+
+bool InfLLMV2AttentionStage2::is_equivalent(const Primitive& other) const {
+  const InfLLMV2AttentionStage2& a_other =
+      static_cast<const InfLLMV2AttentionStage2&>(other);
+  return scale_ == a_other.scale_ && do_causal_ == a_other.do_causal_;
+}
+
 array pack_and_quantize(
     array& packed_w,
     const array& scales,

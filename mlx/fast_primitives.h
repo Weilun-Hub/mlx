@@ -288,6 +288,73 @@ class InfLLMV2AttentionStage1 : public Custom {
   bool do_causal_;
 };
 
+class InfLLMV2AttentionStage2 : public Custom {
+ public:
+  explicit InfLLMV2AttentionStage2(
+      Stream stream,
+      std::function<std::vector<array>(std::vector<array>)> fallback,
+      const array& cu_seqlens_q,
+      const array& cu_seqlens_k,
+      const int max_seqlen_q,
+      const int max_seqlen_k,
+      const int window_size_left,
+      const int window_size_right,
+      const array& blockmask_uint64,
+      const int block_window_size,
+      const float scale,
+      const bool do_causal)
+      : Custom(stream, fallback), scale_(scale), do_causal_(do_causal), cu_seqlens_q_(cu_seqlens_q), cu_seqlens_k_(cu_seqlens_k), max_seqlen_q_(max_seqlen_q), max_seqlen_k_(max_seqlen_k), window_size_left_(window_size_left), window_size_right_(window_size_right), blockmask_uint64_(blockmask_uint64), block_window_size_(block_window_size) {}
+
+  static bool use_fallback(
+      const array& q,
+      const array& k,
+      const array& v,
+      const array& cu_seqlens_q,
+      const array& cu_seqlens_k,
+      const int max_seqlen_q,
+      const int max_seqlen_k,
+      const int window_size_left,
+      const int window_size_right,
+      const array& blockmask_uint64,
+      const int block_window_size,
+      bool has_mask,
+      bool has_arr_mask,
+      bool do_causal,
+      Stream s);
+
+  void eval_cpu(const std::vector<array>& inputs, std::vector<array>& outputs)
+      override {
+    throw std::runtime_error("NYI");
+  }
+
+  void eval_gpu(const std::vector<array>& inputs, std::vector<array>& outputs)
+      override {
+    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage2::eval_gpu" << std::endl;
+    eval_gpu(inputs, outputs[0]);
+  }
+
+  void eval_gpu(const std::vector<array>& inputs, array& out);
+  bool is_equivalent(const Primitive& other) const override;
+
+  DEFINE_PRINT(InfLLMV2AttentionStage2);
+  DEFINE_INPUT_OUTPUT_SHAPE()
+  auto state() const {
+    return std::make_tuple(nullptr, cu_seqlens_q_, cu_seqlens_k_, max_seqlen_q_, max_seqlen_k_, window_size_left_, window_size_right_, blockmask_uint64_, block_window_size_, scale_, do_causal_);
+  }
+
+ private:
+  const array& cu_seqlens_q_;
+  const array& cu_seqlens_k_;
+  const int max_seqlen_q_;
+  const int max_seqlen_k_;
+  const int window_size_left_;
+  const int window_size_right_;
+  const array& blockmask_uint64_;
+  const int block_window_size_;
+  float scale_;
+  bool do_causal_;
+};
+
 class AffineQuantize : public Custom {
  public:
   explicit AffineQuantize(

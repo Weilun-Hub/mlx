@@ -62,6 +62,23 @@ array infllmv2_attention_stage1(
     const std::vector<array>& mask_arrs = {},
     StreamOrDevice s = {});
 
+array infllmv2_attention_stage2(
+    const array& queries,
+    const array& keys,
+    const array& values,
+    const array& cu_seqlens_q,
+    const array& cu_seqlens_k,
+    const int max_seqlen_q,
+    const int max_seqlen_k,
+    const int window_size_left,
+    const int window_size_right,
+    const array& blockmask_uint64,
+    const int block_window_size,
+    const float scale,
+    const std::string& mask_mode = "",
+    const std::vector<array>& mask_arrs = {},
+    StreamOrDevice s = {});
+
 std::tuple<array, array, array> affine_quantize(
     const array& w,
     int group_size = 64,
