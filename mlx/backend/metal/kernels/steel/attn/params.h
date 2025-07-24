@@ -55,6 +55,13 @@ struct InfLLMV2AttnStage2Params {
   int window_size_left; ///< Left window size for local attention
   int window_size_right; ///< Right window size for local attention
 
+  int m_block_dim;
+  int n_block_dim;
+  int num_k_heads;
+  int num_block_m;
+  int num_block_n;
+  int block_window_size;
+
   int gqa_factor; ///< Group Query factor
   float scale; ///< Attention scale
 

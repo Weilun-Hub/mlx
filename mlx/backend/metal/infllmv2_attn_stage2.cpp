@@ -26,6 +26,7 @@ void infllmv2_attention_stage2_metal(
     const int max_seqlen_k,
     const int window_size_left,
     const int window_size_right,
+    const int block_window_size,
     const array& blockmask_uint64,
     const float scale,
     array& o,
@@ -136,6 +137,13 @@ void infllmv2_attention_stage2_metal(
       /* int window_size_left = */ window_size_left,
       /* int window_size_right = */ window_size_right,
 
+      /* int m_block_dim = */ 16,
+      /* int n_block_dim = */ 64,
+      /* int num_k_heads = */ 2,
+      /* int num_block_m = */ (qL + 16 - 1) / 16,
+      /* int num_block_n = */ (max_seqlen_k + 64 - 1) / 64,
+      /* int block_window_size = */ block_window_size,
+
       /* int gqa_factor = */ gqa_factor,
       /* float scale = */ scale,
 
@@ -179,7 +187,7 @@ void infllmv2_attention_stage2_metal(
   printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", NQ, H, B);
   printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", 32, wm, wn);
   
-  // compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
+  compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
 }
 
 } // namespace
@@ -200,7 +208,7 @@ bool InfLLMV2AttentionStage2::use_fallback(
     bool has_arr_mask,
     bool do_causal,
     Stream s) {
-  printf("NYI\n");
+  printf("[DEBUG ZWL] InfLLMV2AttentionStage2::use_fallback NYI\n");
   return false;
 }
 
@@ -277,7 +285,7 @@ void InfLLMV2AttentionStage2::eval_gpu(
       ? std::optional<array>{copy_unless(is_matrix_contiguous, inputs[3])}
       : std::nullopt;
 
-  infllmv2_attention_stage2_metal(s, d, q, k, v, cu_seqlens_q_, cu_seqlens_k_, max_seqlen_q_, max_seqlen_k_, window_size_left_, window_size_right_, blockmask_uint64_, scale_, o, do_causal_, mask);
+  infllmv2_attention_stage2_metal(s, d, q, k, v, cu_seqlens_q_, cu_seqlens_k_, max_seqlen_q_, max_seqlen_k_, window_size_left_, window_size_right_, block_window_size_, blockmask_uint64_, scale_, o, do_causal_, mask);
 
   d.add_temporaries(std::move(copies), s.index);
 }
