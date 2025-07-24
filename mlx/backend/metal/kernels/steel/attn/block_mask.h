@@ -12,8 +12,8 @@
 namespace mlx {
 namespace steel {
 
-struct BlockMask {
-  device uint64_t* blockmask_ptr;
+struct BlockMaskIterator {
+  const device uint64_t* blockmask_ptr;
   int row_offset;
   int uint64_per_row;
   int cache_seqlen_k;
@@ -23,33 +23,31 @@ struct BlockMask {
   int batch_idx, head_idx;
   int k_window_left, k_window_right;
 
-  METAL_FUNC BlockMask(const InfLLMV2AttentionStage2Params& params, const BlockInfo& binfo, const device uint64_t* blockmask, const int kBlockM, const int kBlockN, const int batch_idx, const int loop_step_idx, int n_block_min, int n_block_max) {
-    this->cache_seqlen_k = binfo.actual_seqlen_k - binfo.actual_seqlen_q / params.m_block_dim;
-    this->max_block_idx = (binfo.actual_seqlen_k + params.n_block_dim - 1) / params.n_block_dim;
-    this->m_block_dim = params.m_block_dim;
-    this->n_block_dim = params.n_block_dim;
+  METAL_FUNC BlockMaskIterator(const int m_block_dim, const int n_block_dim, const int num_blocks_m, const int num_blocks_n, const int block_window_size, const int num_k_heads, BlockInfo binfo, const device uint64_t* blockmask, const int kBlockM, const int kBlockN, const int batch_idx, const int loop_step_idx, int n_block_min, int n_block_max) {
+    this->cache_seqlen_k = binfo.actual_seqlen_k - binfo.actual_seqlen_q / m_block_dim;
+    this->max_block_idx = (binfo.actual_seqlen_k + n_block_dim - 1) / n_block_dim;
+    this->m_block_dim = m_block_dim;
+    this->n_block_dim = n_block_dim;
     this->n_block_min = n_block_min;
     this->n_block_max = n_block_max;
     this->batch_idx = batch_idx;
     this->head_idx = head_idx;
 
-    int num_blocks_m = params.num_block_m;
-    int num_blocks_n = params.num_blocks_n;
     int uint64_per_row = (num_blocks_n + 64 - 1) / 64;
-    int row_offset = params.cu_seqlens_q != nullptr ? binfo.blockmask_q_offset(m_block_dim, batch_idx) : batch_idx * params.num_k_heads * params.num_blocks_m;
+    int row_offset = binfo.blockmask_q_offset(m_block_dim, batch_idx);
 
-    this->blockmask_ptr = blockmask + head_idx * params.num_blocks_n * uint64_per_row + row_offset * uint64_per_row + loop_step_idx * uint64_per_row;
+    this->blockmask_ptr = blockmask + head_idx * num_blocks_n * uint64_per_row + row_offset * uint64_per_row + loop_step_idx * uint64_per_row;
 
     int q_block_idx = loop_step_idx * cache_seqlen_k;
     this->k_window_right = q_block_idx / n_block_dim;
-    this->k_window_left = this->k_window_right - params.block_window_size + 1;
+    this->k_window_left = this->k_window_right - block_window_size + 1;
   }
 
-  METAL_FUNC ~BlockMask() {
+  METAL_FUNC ~BlockMaskIterator() {
     this->blockmask_ptr = nullptr;
   }
 
-  METAL_FUNC int clzll(const uint64_t x) {
+  METAL_FUNC int clzll(uint64_t x) const {
     if (x == 0) { return 64; }
 
     int n = 0;

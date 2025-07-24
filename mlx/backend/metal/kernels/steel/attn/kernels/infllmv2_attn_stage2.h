@@ -78,7 +78,7 @@ template <
     const device T* Q [[buffer(0)]],
     const device T* K [[buffer(1)]],
     const device T* V [[buffer(2)]],
-    const device uint64_t* blockmask [[buffer(3)]],
+    const device uint64_t* blockmask_uint64 [[buffer(3)]],
     device T* O [[buffer(4)]],
     const constant InfLLMV2AttnStage2Params* params [[buffer(5)]],
     const constant AttnMaskParams* mask_params [[buffer(6), function_constant(has_mask)]],
@@ -94,8 +94,8 @@ template <
   // Move to correct block
   ulong3 tidl{tid.x, tid.y, tid.z};
 
-  BlockInfo binfo(params, int(tid.z));
-  BlockMask blockmask(params, binfo, blockmask, int(tid.y), int(tid.x), int(tid.z), int(tid.x), 0, params->num_blocks_n);
+  BlockInfo block_info(params->cu_seqlens_q[0], params->cu_seqlens_q[1], params->cu_seqlens_k[0], params->cu_seqlens_k[1], params->max_seqlen_q, params->max_seqlen_k, int(tid.z));
+  BlockMaskIterator block_mask_iterator(params->m_block_dim, params->n_block_dim, params->num_block_m, params->num_block_n, params->block_window_size, params->num_k_heads, block_info, blockmask_uint64, int(tid.y), int(tid.x), int(tid.z), int(tid.x), 0, params->num_block_n);
 
   // Q += tidl.z * params->Q_strides[0] + // Batch
   //     tidl.y * params->Q_strides[1] + // Head
