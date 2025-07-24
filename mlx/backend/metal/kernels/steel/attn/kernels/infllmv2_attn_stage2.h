@@ -94,7 +94,8 @@ template <
   // Move to correct block
   ulong3 tidl{tid.x, tid.y, tid.z};
 
-  
+  BlockInfo binfo(params, int(tid.z));
+  BlockMask blockmask(params, binfo, blockmask, int(tid.y), int(tid.x), int(tid.z), int(tid.x), 0, params->num_blocks_n);
 
   // Q += tidl.z * params->Q_strides[0] + // Batch
   //     tidl.y * params->Q_strides[1] + // Head
