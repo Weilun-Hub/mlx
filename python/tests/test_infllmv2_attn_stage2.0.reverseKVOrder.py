@@ -745,8 +745,9 @@ if __name__ == "__main__":
     cu_seqlens_k_mlx = mx.array(cu_seqlens_k.detach().cpu().numpy())
     out_mlx = mx.fast.infllmv2_attention_stage2(q_mlx, k_mlx, v_mlx, cu_seqlens_q_mlx, cu_seqlens_k_mlx, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, BLOCK_WINDOW_SIZE, scale=scale)
     print("out_mlx.shape", out_mlx.shape)
-    # print(out_mlx[0, 0, 0, 0])
+    
     diff = mx.abs(out_mlx - reference)
     print(f"diff.max(): {diff.max():.4f}")
     print(f"diff.min(): {diff.min():.4f}")
+
     

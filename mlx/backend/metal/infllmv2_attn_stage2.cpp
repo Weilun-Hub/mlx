@@ -183,9 +183,16 @@ void infllmv2_attention_stage2_metal(
     compute_encoder.set_input_array(m, 6);
   }
 
-  MTL::Size grid_dims = MTL::Size(NQ, H, B);
+  int num_q_per_block = 2;
+  int num_block_q = (qL + num_q_per_block - 1) / num_q_per_block;
+  printf("[DEBUG ZWL] num_q_per_block: %d, num_block_q: %d\n", num_q_per_block, num_block_q);
+
+  int head_group_num = k.shape(1);
+  printf("[DEBUG ZWL] head group num: %d\n", head_group_num);
+
+  MTL::Size grid_dims = MTL::Size(num_block_q, head_group_num, B);
   MTL::Size group_dims = MTL::Size(32, wm, wn);
-  printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", NQ, H, B);
+  printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", num_block_q, head_group_num, B);
   printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", 32, wm, wn);
   
   compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
@@ -257,6 +264,8 @@ void InfLLMV2AttentionStage2::eval_gpu(
 
   // We are in vector mode ie single query
   assert(q_pre.shape(2) > 8);
+
+  assert(q_pre.shape(0) == 1); // batch size must be 1 currently
   
   printf("[DEBUG ZWL] q_pre.shape(2) > 8, full attention mode\n");
   const auto& q = copy_unless(is_matrix_contiguous, q_pre);
