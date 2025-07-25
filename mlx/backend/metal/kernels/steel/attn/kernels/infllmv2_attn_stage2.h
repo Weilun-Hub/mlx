@@ -94,21 +94,6 @@ template <
   // Move to correct block
   ulong3 tidl{tid.x, tid.y, tid.z};
 
-  // int batch_idx = int(tid.z); // batch_idx = 0 currently
-  // int head_idx = int(tid.y);
-  // int q_seq_block_idx = int(tid.x);
-
-  // int sum_s_q = params->cu_seqlens_q[batch_idx];
-  // int sum_s_k = params->cu_seqlens_k[batch_idx];
-
-  // int actual_seqlen_q = params->cu_seqlens_q[batch_idx + 1] - sum_s_q;
-  // int leftpad_k = 0;
-  // int seqlen_k_cache = params->cu_seqlens_k[batch_idx + 1] - sum_s_k - leftpad_k;
-  // int actual_seqlen_k = seqlen_k_cache;
-  
-  BlockInfo block_info(params->cu_seqlens_q[0], params->cu_seqlens_q[1], params->cu_seqlens_k[0], params->cu_seqlens_k[1], params->max_seqlen_q, params->max_seqlen_k, int(tid.z));
-  BlockMaskIterator block_mask_iterator(params->m_block_dim, params->n_block_dim, params->num_block_m, params->num_block_n, params->block_window_size, params->num_k_heads, block_info, blockmask_uint64, int(tid.y), int(tid.x), int(tid.z), int(tid.x), 0, params->num_block_n);
-
   K += tidl.z * params->K_strides[0] + // Batch
       tid.y * params->K_strides[1]; // Head
 
@@ -223,9 +208,6 @@ template <
 
   // Init row reduction variables
   constexpr short kRowsPT = decltype(Stile)::kRowsPerThread;
-  // if (simd_lane_id == 0 && simd_group_id == 0) {
-  //   printf("[DEBUG ZWL] kRowsPT: %d\n", kRowsPT);
-  // }
   static_assert(kRowsPT == 1, "Expected kRowsPT to be 1");
 
   AccumType max_score[kRowsPT];
@@ -244,6 +226,25 @@ template <
     kb_lim = (q_max + BK - 1) / BK;
     kb_lim = min(params->NK, kb_lim);
   }
+
+  BlockMaskIterator block_mask_iterator(
+    params->qL,
+    params->kL,
+    params->num_kv_per_blockmask,
+    params->B,
+    params->num_k_heads,
+    params->num_q_per_block,
+    params->uint64_per_row,
+    blockmask_uint64,
+    kb_lim,
+    BK,
+    simd_lane_id,
+    simd_group_id,
+    tid,
+    lid
+  );
+
+  int next_block_idx = block_mask_iterator.max_no_larger(kb_lim - 1);
 
   KBlockLoader loader_k(
       K + (kb_lim - 1) * BK * params->K_strides[2], params->K_strides[2], Ks, simd_group_id, simd_lane_id);

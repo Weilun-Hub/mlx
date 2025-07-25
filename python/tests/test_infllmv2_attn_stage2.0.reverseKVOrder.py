@@ -738,8 +738,11 @@ if __name__ == "__main__":
     
     blockmask_uint64, last_dim = topk_to_uint64_numpy(topk_idx.cpu().numpy(), max_seqlen_k, BLOCK_SIZE)
     print("blockmask_uint64.shape", blockmask_uint64.shape)
+    blockmask_uint64 = blockmask_uint64.reshape(1, NHEADS_K, SEQLEN_Q, last_dim)
+    print("blockmask_uint64.shape", blockmask_uint64.shape)
     blockmask_uint64 = mx.array(blockmask_uint64)
     
+    # exit()
     
     cu_seqlens_q_mlx = mx.array(cu_seqlens_q.detach().cpu().numpy())
     cu_seqlens_k_mlx = mx.array(cu_seqlens_k.detach().cpu().numpy())

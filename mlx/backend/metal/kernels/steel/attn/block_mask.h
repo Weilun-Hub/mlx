@@ -14,33 +14,34 @@ namespace steel {
 
 struct BlockMaskIterator {
   const device uint64_t* blockmask_ptr;
-  int row_offset;
-  int uint64_per_row;
-  int cache_seqlen_k;
-  int max_block_idx;
-  int m_block_dim, n_block_dim;
-  int n_block_min, n_block_max;
-  int batch_idx, head_idx;
-  int k_window_left, k_window_right;
+  int max_blockmask_idx, max_k_block_idx;
+  int num_k_per_blockmask, num_k_per_block;
 
-  METAL_FUNC BlockMaskIterator(const int m_block_dim, const int n_block_dim, const int num_blocks_m, const int num_blocks_n, const int block_window_size, const int num_k_heads, BlockInfo binfo, const device uint64_t* blockmask, const int kBlockM, const int kBlockN, const int batch_idx, const int loop_step_idx, int n_block_min, int n_block_max) {
-    this->cache_seqlen_k = binfo.actual_seqlen_k - binfo.actual_seqlen_q / m_block_dim;
-    this->max_block_idx = (binfo.actual_seqlen_k + n_block_dim - 1) / n_block_dim;
-    this->m_block_dim = m_block_dim;
-    this->n_block_dim = n_block_dim;
-    this->n_block_min = n_block_min;
-    this->n_block_max = n_block_max;
-    this->batch_idx = batch_idx;
-    this->head_idx = head_idx;
+  METAL_FUNC BlockMaskIterator(
+    const int qL,
+    const int kL,
+    const int num_k_per_blockmask, // 64
+    const int B,
+    const int num_k_heads,
+    const int num_q_per_block, // 16
+    const int uint64_per_row,
+    const device uint64_t* blockmask,
+    const int max_k_block_idx,
+    const int num_k_per_block, // 16
+    uint simd_lane_id [[thread_index_in_simdgroup]],
+    uint simd_group_id [[simdgroup_index_in_threadgroup]], 
+    uint3 tid [[threadgroup_position_in_grid]],
+    uint3 lid [[thread_position_in_threadgroup]] // q_block_idx, group_idx, batch_idx
+  ) {
+    this->max_blockmask_idx = (kL + num_k_per_blockmask - 1) / num_k_per_blockmask;
+    this->max_k_block_idx = max_k_block_idx;
+    this->num_k_per_blockmask = num_k_per_blockmask;
+    this->num_k_per_block = num_k_per_block;
 
-    int uint64_per_row = (num_blocks_n + 64 - 1) / 64;
-    int row_offset = binfo.blockmask_q_offset(m_block_dim, batch_idx);
-
-    this->blockmask_ptr = blockmask + head_idx * num_blocks_n * uint64_per_row + row_offset * uint64_per_row + loop_step_idx * uint64_per_row;
-
-    int q_block_idx = loop_step_idx * cache_seqlen_k;
-    this->k_window_right = q_block_idx / n_block_dim;
-    this->k_window_left = this->k_window_right - block_window_size + 1;
+    this->blockmask_ptr = blockmask
+      + lid.z * num_k_heads * qL * uint64_per_row 
+      + lid.y * qL * uint64_per_row
+      + lid.x * num_q_per_block * uint64_per_row; // offset to blockmask_ptr for current block
   }
 
   METAL_FUNC ~BlockMaskIterator() {
@@ -60,45 +61,43 @@ struct BlockMaskIterator {
     return n;
   }
 
-  METAL_FUNC int max_no_larger(int target) const {
-    if (this->max_block_idx == 0) {
-      return -1;
-    }
+  METAL_FUNC int max_no_larger(int k_block_idx) const {
 
-    if ((k_window_left <= target) && (target <= k_window_right)) {
-      return target;
-    }
+    k_block_idx = min(k_block_idx, this->max_k_block_idx - 1);
 
-    target = min(target, max_block_idx - 1);
+    int blockmask_idx = k_block_idx / (this->num_k_per_blockmask / this->num_k_per_block);
 
-    int target_bit_pos = target;
+    int blockmask_uint64_idx = blockmask_idx / 64;
 
-    int uint64_offset = target_bit_pos / 64;
+    int blockmask_uint64_bit_idx = blockmask_idx % 64;
 
-    int bit_pos = target_bit_pos % 64;
+    uint64_t bit_pos_in_1_uint64 = blockmask_uint64_bit_idx != 63 ? (1ULL << (blockmask_uint64_bit_idx + 1)) - 1 : 0xFFFFFFFFFFFFFFFFULL;
 
-    uint64_t mask = bit_pos != 63 ? (1ULL << (bit_pos + 1)) - 1 : 0xFFFFFFFFFFFFFFFFULL;
+    uint64_t mask = blockmask_ptr[blockmask_uint64_idx] & bit_pos_in_1_uint64;
 
-    uint64_t value = blockmask_ptr[uint64_offset] & mask;
+    int target_blockmask_idx = -1;
 
-    int result = -1;
-    if (value != 0) {
-      int highest_bit = 63 - clzll(value);
-      result = highest_bit + (uint64_offset * 64);
+    if (mask != 0) {
+      int highest_bit = 63 - clzll(mask);
+      target_blockmask_idx = highest_bit + blockmask_uint64_idx * 64;
     } else {
-      for (int i = uint64_offset - 1; i >= 0; --i) {
-        value = blockmask_ptr[i];
-        if (value != 0) {
-          int highest_bit = 63 - clzll(value);
-          result = highest_bit + (i * 64);
+      for (int i = blockmask_uint64_idx - 1; i >= 0; --i) {
+        mask = blockmask_ptr[i];
+        if (mask != 0) {
+          int highest_bit = 63 - clzll(mask);
+          target_blockmask_idx = highest_bit + i * 64;
           break;
         }
       }
     }
 
-    if (target > k_window_right && result <= k_window_right && k_window_left <= k_window_right) { return k_window_right; }
+    if (target_blockmask_idx == -1) {
+      return -1;
+    }
 
-    return result;
+    int target_k_block_idx = target_blockmask_idx * (this->num_k_per_blockmask / this->num_k_per_block);
+
+    return target_k_block_idx;
   }
 };
 

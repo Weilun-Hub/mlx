@@ -137,12 +137,11 @@ void infllmv2_attention_stage2_metal(
       /* int window_size_left = */ window_size_left,
       /* int window_size_right = */ window_size_right,
 
-      /* int m_block_dim = */ 16,
-      /* int n_block_dim = */ 64,
+      /* int num_q_per_block = */ 2,
+      /* int num_kv_per_blockmask = */ 64,
       /* int num_k_heads = */ 2,
-      /* int num_block_m = */ (qL + 16 - 1) / 16,
-      /* int num_block_n = */ (max_seqlen_k + 64 - 1) / 64,
       /* int block_window_size = */ block_window_size,
+      /* int uint64_per_row = */ blockmask_uint64.shape(2),
 
       /* int gqa_factor = */ gqa_factor,
       /* float scale = */ scale,
