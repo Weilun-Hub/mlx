@@ -131,6 +131,10 @@ struct BlockLoader {
   METAL_FUNC void next() {
     src += tile_stride;
   }
+
+  METAL_FUNC void previous() {
+    src -= tile_stride;
+  }
 };
 
 template <int R, int C>
@@ -257,6 +261,10 @@ struct BlockLoaderT {
   /* Iteration helper */
   METAL_FUNC void next() {
     src += tile_stride;
+  }
+
+  METAL_FUNC void previous() {
+    src -= tile_stride;
   }
 };
 
