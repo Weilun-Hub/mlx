@@ -168,10 +168,6 @@ template <
 
   QBlockLoader loader_q(
       Q, params->Q_strides[2], Qs, simd_group_id, simd_lane_id);
-  KBlockLoader loader_k(
-      K, params->K_strides[2], Ks, simd_group_id, simd_lane_id);
-  VBlockLoader loader_v(
-      V, params->V_strides[2], Vs, simd_group_id, simd_lane_id);
 
   TransformScale<T> ts(static_cast<T>(params->scale * 1.44269504089));
 
@@ -248,8 +244,13 @@ template <
     kb_lim = min(params->NK, kb_lim);
   }
 
+  KBlockLoader loader_k(
+      K + (kb_lim - 1) * BK * params->K_strides[2], params->K_strides[2], Ks, simd_group_id, simd_lane_id);
+  VBlockLoader loader_v(
+      V + (kb_lim - 1) * BK * params->V_strides[2], params->V_strides[2], Vs, simd_group_id, simd_lane_id);
+
   // Loop over KV seq length
-  for (int kb = 0; kb < kb_lim; kb++) {
+  for (int kb = kb_lim - 1; kb >= 0; kb--) {
     // Load K block and apply scale
     threadgroup_barrier(mem_flags::mem_threadgroup);
     if (!align_K && kb == (params->NK_aligned)) {
@@ -448,8 +449,8 @@ template <
     }
 
     // Prepare for next iteration
-    loader_k.next();
-    loader_v.next();
+    loader_k.previous();
+    loader_v.previous();
   }
 
   // Normalize output
