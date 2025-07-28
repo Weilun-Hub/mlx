@@ -4,7 +4,6 @@
 #include "mlx/backend/metal/kernels/utils.h"
 
 #include "mlx/backend/metal/kernels/steel/attn/attn.h"
-#include "mlx/backend/metal/kernels/steel/attn/block_info.h"
 #include "mlx/backend/metal/kernels/steel/attn/block_mask.h"
 #include "mlx/backend/metal/kernels/steel/attn/kernels/infllmv2_attn_stage2.h"
 

@@ -14,6 +14,10 @@ __pycache__/
 *.metallib
 venv/
 
+*.log
+
+*.code-workspace
+
 # Distribution / packaging
 python/mlx/core
 python/mlx/share
