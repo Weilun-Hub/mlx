@@ -273,6 +273,13 @@ struct MMATile {
     }
   }
 
+  METAL_FUNC constexpr void set(T value) {
+    STEEL_PRAGMA_UNROLL
+    for (short i = 0; i < kNumFrags; ++i) {
+      val_frags[i] = frag_type(value);
+    }
+  }
+
   METAL_FUNC constexpr thread frag_type& frag_at(const short i, const short j) {
     return val_frags[i * kTileCols + j];
   }

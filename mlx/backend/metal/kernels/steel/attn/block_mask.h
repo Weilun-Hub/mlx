@@ -15,33 +15,34 @@ namespace steel {
 struct BlockMaskIterator {
   const device uint64_t* blockmask_ptr;
   int max_blockmask_idx, max_k_block_idx;
-  int num_k_per_blockmask, num_k_per_block;
+  int num_k_per_blockmask, num_k_per_block, num_block_per_blockmask;
 
   METAL_FUNC BlockMaskIterator(
     const int qL,
     const int kL,
     const int num_k_per_blockmask, // 64
-    const int B,
-    const int num_k_heads,
-    const int num_q_per_block, // 16
-    const int uint64_per_row,
-    const device uint64_t* blockmask,
-    const int max_k_block_idx,
     const int num_k_per_block, // 16
+    const int B, // 1
+    const int num_k_heads, // 2
+    const int uint64_per_row, // 1
+    const device uint64_t* blockmask,
     uint simd_lane_id [[thread_index_in_simdgroup]],
-    uint simd_group_id [[simdgroup_index_in_threadgroup]], 
+    uint simd_group_id [[simdgroup_index_in_threadgroup]],
     uint3 tid [[threadgroup_position_in_grid]],
     uint3 lid [[thread_position_in_threadgroup]] // q_block_idx, group_idx, batch_idx
   ) {
-    this->max_blockmask_idx = (kL + num_k_per_blockmask - 1) / num_k_per_blockmask;
-    this->max_k_block_idx = max_k_block_idx;
+    this->max_blockmask_idx = (kL + num_k_per_blockmask - 1) / num_k_per_blockmask; // 2048 / 64 = 32
+    this->max_k_block_idx = (kL + num_k_per_block - 1) / num_k_per_block; // 2048 / 16 = 128
     this->num_k_per_blockmask = num_k_per_blockmask;
     this->num_k_per_block = num_k_per_block;
+    this->num_block_per_blockmask = num_k_per_blockmask / num_k_per_block;
 
+    // tid: q_idx, group_idx (kv_head_idx), batch_idx
+    // blockmask: bs * num_k_heads * qL * uint64_per_row, eg: 1 * 2 * 1024 * 1
     this->blockmask_ptr = blockmask
-      + lid.z * num_k_heads * qL * uint64_per_row 
-      + lid.y * qL * uint64_per_row
-      + lid.x * num_q_per_block * uint64_per_row; // offset to blockmask_ptr for current block
+      + tid.z * num_k_heads * qL * uint64_per_row 
+      + tid.y * qL * uint64_per_row
+      + tid.x * uint64_per_row; // offset to blockmask_ptr for current block
   }
 
   METAL_FUNC ~BlockMaskIterator() {
@@ -63,15 +64,25 @@ struct BlockMaskIterator {
 
   METAL_FUNC int max_no_larger(int k_block_idx) const {
 
+    if (blockmask_ptr == nullptr) { return k_block_idx; }
+
     k_block_idx = min(k_block_idx, this->max_k_block_idx - 1);
 
-    int blockmask_idx = k_block_idx / (this->num_k_per_blockmask / this->num_k_per_block);
+    int blockmask_idx = k_block_idx / this->num_block_per_blockmask; // blockmask_idx = k_block_idx / 4
 
     int blockmask_uint64_idx = blockmask_idx / 64;
 
     int blockmask_uint64_bit_idx = blockmask_idx % 64;
 
     uint64_t bit_pos_in_1_uint64 = blockmask_uint64_bit_idx != 63 ? (1ULL << (blockmask_uint64_bit_idx + 1)) - 1 : 0xFFFFFFFFFFFFFFFFULL;
+
+    // if (blockmask_ptr[blockmask_uint64_idx] == 0) {
+    //   if (blockmask_uint64_idx == 0) {
+    //     return 0;
+    //   } else {
+    //     return (blockmask_uint64_idx - 1) * 64 + this->num_block_per_blockmask - 1;
+    //   }
+    // }
 
     uint64_t mask = blockmask_ptr[blockmask_uint64_idx] & bit_pos_in_1_uint64;
 
@@ -95,9 +106,9 @@ struct BlockMaskIterator {
       return -1;
     }
 
-    int target_k_block_idx = target_blockmask_idx * (this->num_k_per_blockmask / this->num_k_per_block);
+    int target_k_block_idx = target_blockmask_idx * this->num_block_per_blockmask; // target_k_block_idx is the start block index of the blockmask
 
-    return target_k_block_idx;
+    return target_k_block_idx + this->num_block_per_blockmask - 1;
   }
 };
 

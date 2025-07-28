@@ -229,23 +229,21 @@ template <
   }
 
   BlockMaskIterator block_mask_iterator(
-    params->qL,
-    params->kL,
-    params->num_kv_per_blockmask,
-    params->B,
-    params->num_k_heads,
-    params->num_q_per_block,
-    params->uint64_per_row,
-    blockmask_uint64,
-    kb_lim,
-    BK,
-    simd_lane_id,
-    simd_group_id,
-    tid,
-    lid
+    /* int qL = */ params->qL,
+    /* int kL = */ params->kL,
+    /* int num_kv_per_blockmask = */ params->num_kv_per_blockmask, // 64
+    /* int num_k_per_block = */ BK, // 16
+    /* int B = */ params->B, // 1
+    /* int num_k_heads = */ params->num_k_heads,
+    /* int uint64_per_row = */ params->uint64_per_row,
+    /* const device uint64_t* blockmask = */ blockmask_uint64,
+    /* uint simd_lane_id [[thread_index_in_simdgroup]] = */ simd_lane_id,
+    /* uint simd_group_id [[simdgroup_index_in_threadgroup]] = */ simd_group_id,
+    /* uint3 tid [[threadgroup_position_in_grid]] = */ tid,
+    /* uint3 lid [[thread_position_in_threadgroup]] = */ lid
   );
 
-  int next_block_idx = block_mask_iterator.max_no_larger(kb_lim - 1);
+  int next_block_idx = block_mask_iterator.max_no_larger(kb_lim - 1); // 128 - 1 = 127
 
   KBlockLoader loader_k(
       K + (kb_lim - 1) * BK * params->K_strides[2], params->K_strides[2], Ks, simd_group_id, simd_lane_id);
@@ -254,32 +252,41 @@ template <
 
   // Loop over KV seq length
   for (int kb = kb_lim - 1; kb >= 0; kb--) {
+
+    bool skip = (next_block_idx != -1) && (next_block_idx < kb);
+    
     // Load K block and apply scale
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-    if (!align_K && kb == (params->NK_aligned)) {
-      loader_k.load_safe(short2(BD, params->kL_rem));
-    } else {
-      loader_k.load_unsafe();
+    if (!skip) {
+      threadgroup_barrier(mem_flags::mem_threadgroup);
+      if (!align_K && kb == (params->NK_aligned)) {
+        loader_k.load_safe(short2(BD, params->kL_rem));
+      } else {
+        loader_k.load_unsafe();
+      }
     }
 
     // Do S = Q @ K.T
     Stile.clear();
 
-    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (!skip) {
+      threadgroup_barrier(mem_flags::mem_threadgroup);
+      STEEL_PRAGMA_UNROLL
+      for (short dd = 0; dd < TD; dd++) { // TD = 32
+        simdgroup_barrier(mem_flags::mem_none);
 
-    STEEL_PRAGMA_UNROLL
-    for (short dd = 0; dd < TD; dd++) { // TD = 32
-      simdgroup_barrier(mem_flags::mem_none);
+        Qtile.template load<T, 1, 1, BQ, 1>(
+            &Qs[Qs_offset + dd * Qs_tile_stride]);
+        Ktile.template load<T, 1, 1, LDK_tgp, 1>(
+            &Ks[Ks_offset + dd * Ks_tile_stride]);
 
-      Qtile.template load<T, 1, 1, BQ, 1>(
-          &Qs[Qs_offset + dd * Qs_tile_stride]);
-      Ktile.template load<T, 1, 1, LDK_tgp, 1>(
-          &Ks[Ks_offset + dd * Ks_tile_stride]);
+        simdgroup_barrier(mem_flags::mem_none);
 
-      simdgroup_barrier(mem_flags::mem_none);
-
-      tile_matmad(Stile, Qtile, Ktile, Stile);
+        tile_matmad(Stile, Qtile, Ktile, Stile);
+      }
+    } else {
+      Stile.set(Limits<AccumType>::finite_min);
     }
+
 
     // Mask out length sequence
     if (!align_K && kb == (params->NK_aligned)) {
@@ -369,13 +376,14 @@ template <
       }
     }
 
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-
-    // Load V blocks
-    if (!align_K && kb == (params->NK_aligned)) {
-      loader_v.load_safe(short2(BD, params->kL_rem));
-    } else {
-      loader_v.load_unsafe();
+    if (!skip) {
+      threadgroup_barrier(mem_flags::mem_threadgroup);
+      // Load V blocks
+      if (!align_K && kb == (params->NK_aligned)) {
+        loader_v.load_safe(short2(BD, params->kL_rem));
+      } else {
+        loader_v.load_unsafe();
+      }
     }
 
     // Do softmax
@@ -413,40 +421,44 @@ template <
     // Update norm
     STEEL_PRAGMA_UNROLL
     for (short i = 0; i < kRowsPT; ++i) {
-      sum_score[i] = sum_score[i] * factor[i] + sum_score_tmp[i];
+      if (!skip) {
+        sum_score[i] = sum_score[i] * factor[i] + sum_score_tmp[i];
+      }
     }
 
     // Update O
-    Otile.template row_bin_op<MulOp>(factor);
+    if (!skip) {
+      Otile.template row_bin_op<MulOp>(factor);
 
-    // Load V into registers
-    threadgroup_barrier(mem_flags::mem_threadgroup);
+      // Load V into registers
+      threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    STEEL_PRAGMA_UNROLL
-    for (short iq = 0; iq < TQ; iq++) {
       STEEL_PRAGMA_UNROLL
-      for (short id = 0; id < TD; id++) {
+      for (short iq = 0; iq < TQ; iq++) {
         STEEL_PRAGMA_UNROLL
-        for (short ik = 0; ik < TK; ik++) {
-          if constexpr (BD == 128) {
-            simdgroup_barrier(mem_flags::mem_none);
+        for (short id = 0; id < TD; id++) {
+          STEEL_PRAGMA_UNROLL
+          for (short ik = 0; ik < TK; ik++) {
+            if constexpr (BD == 128) {
+              simdgroup_barrier(mem_flags::mem_none);
+            }
+
+            const short kk = ik * kFragSize;
+            const short dd = id * kFragSize;
+
+            Vtile.template load<T, 1, 1, LDV_tgp, 1>(
+                &Vs[Vs_offset + kk * LDV_tgp + dd]);
+
+            if constexpr (BD == 128) {
+              simdgroup_barrier(mem_flags::mem_none);
+            }
+
+            MMAFrag_acc_t::mma(
+                Otile.frag_at(iq, id),
+                Stile.frag_at(iq, ik),
+                Vtile.frag_at(0, 0),
+                Otile.frag_at(iq, id));
           }
-
-          const short kk = ik * kFragSize;
-          const short dd = id * kFragSize;
-
-          Vtile.template load<T, 1, 1, LDV_tgp, 1>(
-              &Vs[Vs_offset + kk * LDV_tgp + dd]);
-
-          if constexpr (BD == 128) {
-            simdgroup_barrier(mem_flags::mem_none);
-          }
-
-          MMAFrag_acc_t::mma(
-              Otile.frag_at(iq, id),
-              Stile.frag_at(iq, ik),
-              Vtile.frag_at(0, 0),
-              Otile.frag_at(iq, id));
         }
       }
     }
@@ -454,6 +466,11 @@ template <
     // Prepare for next iteration
     loader_k.previous();
     loader_v.previous();
+
+    next_block_idx = block_mask_iterator.max_no_larger(kb - 1);
+    if (next_block_idx == -1) {
+      break;
+    }
   }
 
   // Normalize output

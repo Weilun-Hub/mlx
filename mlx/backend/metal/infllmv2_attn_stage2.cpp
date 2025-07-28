@@ -137,11 +137,11 @@ void infllmv2_attention_stage2_metal(
       /* int window_size_left = */ window_size_left,
       /* int window_size_right = */ window_size_right,
 
-      /* int num_q_per_block = */ 2,
+      /* int num_q_per_block = */ 1,
       /* int num_kv_per_blockmask = */ 64,
       /* int num_k_heads = */ 2,
       /* int block_window_size = */ block_window_size,
-      /* int uint64_per_row = */ blockmask_uint64.shape(2),
+      /* int uint64_per_row = */ blockmask_uint64.shape(3), // bs * num_k_heads * qL * uint64_per_row, eg: 1 * 2 * 1024 * 1
 
       /* int gqa_factor = */ gqa_factor,
       /* float scale = */ scale,
@@ -262,11 +262,11 @@ void InfLLMV2AttentionStage2::eval_gpu(
   };
 
   // We are in vector mode ie single query
-  assert(q_pre.shape(2) > 8);
+  // assert(q_pre.shape(2) > 8);
 
-  assert(q_pre.shape(0) == 1); // batch size must be 1 currently
+  // assert(q_pre.shape(0) == 1); // batch size must be 1 currently
   
-  printf("[DEBUG ZWL] q_pre.shape(2) > 8, full attention mode\n");
+  // printf("[DEBUG ZWL] q_pre.shape(2) > 8, full attention mode\n");
   const auto& q = copy_unless(is_matrix_contiguous, q_pre);
   const auto& k = copy_unless(is_matrix_contiguous, k_pre);
   const auto& v = copy_unless(is_matrix_contiguous, v_pre);
