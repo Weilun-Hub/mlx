@@ -38,10 +38,10 @@ void infllmv2_attention_stage2_metal(
   wm: Number of SIMD groups (warps) in the M dimension
   wn: Number of SIMD groups (warps) in the N dimension
   These control the threadgroup size for the Metal compute kernel
-  Used in: MTL::Size group_dims = MTL::Size(32, wm, wn) → MTL::Size(32, 4, 1)
-  Total threads per threadgroup = 32 * wm * wn = 32 * 4 * 1 = 128
+  Used in: MTL::Size group_dims = MTL::Size(32, wm, wn) → MTL::Size(32, 2, 1)
+  Total threads per threadgroup = 32 * wm * wn = 32 * 2 * 1 = 64
   */
-  int wm = 4;
+  int wm = 2;
   int wn = 1; 
   
   /*
@@ -50,7 +50,7 @@ void infllmv2_attention_stage2_metal(
   Used in kernel specialization for different head dimensions
 
   bq: Block size for the query sequence dimension
-  Each threadgroup processes 32 query tokens at a time
+  Each threadgroup processes 16 query tokens at a time
   Used to tile the query sequence length for parallel processing
 
   bk: Block size for the key sequence dimension
@@ -61,7 +61,7 @@ void infllmv2_attention_stage2_metal(
   Used to tile the key sequence length for parallel processing
   */
   int bd = q.shape(-1);
-  int bq = 32;
+  int bq = 16;
   int bk = bd < 128 ? 32 : 16;
   printf("[DEBUG ZWL] bd: %d, bq: %d, bk: %d\n", bd, bq, bk);
 
@@ -182,7 +182,7 @@ void infllmv2_attention_stage2_metal(
     compute_encoder.set_input_array(m, 6);
   }
 
-  int num_q_per_block = 2;
+  int num_q_per_block = 1;
   int num_block_q = (qL + num_q_per_block - 1) / num_q_per_block;
   printf("[DEBUG ZWL] num_q_per_block: %d, num_block_q: %d\n", num_q_per_block, num_block_q);
 

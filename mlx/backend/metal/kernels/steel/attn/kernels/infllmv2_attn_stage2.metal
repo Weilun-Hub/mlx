@@ -15,9 +15,9 @@
   infllmv2_attention_stage2, dtype, bq, bk, bd, wm, wn, mtype, float)
 
 #define instantiate_infllmv2_attn_stage2_shapes_helper(iname, itype, mname, mtype)  \
-    instantiate_infllmv2_attn_stage2(iname, itype, 32, 16, 128, 4, 1, mname, mtype) \
-    instantiate_infllmv2_attn_stage2(iname, itype, 32, 32,  80, 4, 1, mname, mtype) \
-    instantiate_infllmv2_attn_stage2(iname, itype, 32, 32,  64, 4, 1, mname, mtype)
+    instantiate_infllmv2_attn_stage2(iname, itype, 16, 16, 128, 2, 1, mname, mtype) \
+    instantiate_infllmv2_attn_stage2(iname, itype, 16, 32,  80, 2, 1, mname, mtype) \
+    instantiate_infllmv2_attn_stage2(iname, itype, 16, 32,  64, 2, 1, mname, mtype)
 
 #define instantiate_infllmv2_attn_stage2_mask_helper(iname, itype) \
     instantiate_infllmv2_attn_stage2_shapes_helper(iname, itype, iname, itype) \

@@ -750,7 +750,6 @@ if __name__ == "__main__":
     print("out_mlx.shape", out_mlx.shape)
     
     diff = mx.abs(out_mlx - reference)
+    print("diff.shape:",diff.shape)
     print(f"diff.max(): {diff.max():.4f}")
     print(f"diff.min(): {diff.min():.4f}")
-
-    

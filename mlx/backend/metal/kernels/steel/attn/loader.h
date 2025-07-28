@@ -145,15 +145,15 @@ struct CShape {
 
 template <
     typename T,
-    short BROWS,
-    short BCOLS,
-    short kDstStrRow,
-    short kDstStrCol,
+    short BROWS, // 16
+    short BCOLS, // 128
+    short kDstStrRow, // 1
+    short kDstStrCol, // 16 + 8
     short reduction_dim,
     short tgp_size,
-    short n_reads = (BCOLS * BROWS) / (tgp_size),
-    short TCOLS = BCOLS / n_reads,
-    short TROWS = tgp_size / TCOLS>
+    short n_reads = (BCOLS * BROWS) / (tgp_size), // 128 * 16 / 16 = 128
+    short TCOLS = BCOLS / n_reads, // 128 / 128 = 1
+    short TROWS = tgp_size / TCOLS> // 16 / 1 = 16
 struct BlockLoaderT {
   STEEL_CONST short n_rows = (BROWS + TROWS - 1) / TROWS;
   STEEL_CONST short vec_size = n_reads;

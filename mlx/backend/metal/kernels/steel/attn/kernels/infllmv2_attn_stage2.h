@@ -67,10 +67,10 @@ struct DivOp {
 // clang-format off
 template <
     typename T,
-    int BQ, // 32
+    int BQ, // 16
     int BK, // 16
     int BD, // 128
-    int WM, // 4
+    int WM, // 2
     int WN, // 1
     typename MaskType = float,
     typename AccumType = float>
@@ -92,7 +92,7 @@ template <
   (void)lid;
 
   // Move to correct block
-  ulong3 tidl{tid.x, tid.y, tid.z};
+  ulong3 tidl{tid.x, tid.y, tid.z}; // q token id, head group id, batch id
 
   K += tidl.z * params->K_strides[0] + // Batch
       tid.y * params->K_strides[1]; // Head
@@ -121,23 +121,24 @@ template <
   threadgroup T Q_smem[BQ * (BD + padQ)];
   threadgroup T KV_smem[tgp_mem_s];
 
+  // Q batch size * num head * seq len q * head dim
   Q += tidl.z * params->Q_strides[0] // Batch
     + tidl.y * params->gqa_factor * params->Q_strides[1] // tidl.y is head group idx, 16 heads in a group
-    + tidl.x * 2 * params->Q_strides[2]; // Sequence, 2 = seq len q to process per block
+    + tidl.x * params->Q_strides[2]; // Sequence, each block process 1 q
 
   O += tidl.z * params->O_strides[0] // Batch
     + tidl.y * params->gqa_factor * params->O_strides[1] // Head
-    + tidl.x * 2 * params->O_strides[2]; // Sequence
+    + tidl.x * params->O_strides[2]; // Sequence
 
-  static_assert(BQ == 32, "BQ must be 32");
-  const short q_Smem_col = simd_group_id * 32 + simd_lane_id;
+  static_assert(BQ == 16, "BQ must be 16");
+  const short q_Smem_col = simd_group_id * 32 + simd_lane_id; // [0, 1] * 32 + [0, 1, 2, ..., 31] ranges from 0 to 63
 
   const T scale_ = static_cast<T>(params->scale * 1.44269504089);
   
   threadgroup_barrier(mem_flags::mem_none);
   for (int head_idx = 0; head_idx < params->gqa_factor; ++head_idx) { // gqa_factor = 16, a.k.a. head in a group
     Q_smem[head_idx * (BD + padQ) + q_Smem_col] = Q[head_idx * params->Q_strides[1] + q_Smem_col] * scale_;
-    Q_smem[(head_idx + params->gqa_factor) * (BD + padQ) + q_Smem_col] = Q[head_idx * params->Q_strides[1] + params->Q_strides[2] + q_Smem_col] * scale_;
+    Q_smem[head_idx * (BD + padQ) + q_Smem_col + 64] = Q[head_idx * params->Q_strides[1] + q_Smem_col + 64] * scale_;
   }
   threadgroup_barrier(mem_flags::mem_none);
 
@@ -149,8 +150,8 @@ template <
   // K is loaded in transposed
   using KBlockLoader = BlockLoaderT<
       /* typename T = */ T,
-      /* short BROWS = */ BK,
-      /* short BCOLS = */ BD,
+      /* short BROWS = */ BK, // 16
+      /* short BCOLS = */ BD, // 128
       /* short kDstStrRow = */ 1,
       /* short kDstStrCol = */ LDK_tgp,
       /* short reduction_dim = */ 0,
@@ -158,8 +159,8 @@ template <
 
   using VBlockLoader = BlockLoaderT<
       /* typename T = */ T,
-      /* short BROWS = */ BK,
-      /* short BCOLS = */ BD,
+      /* short BROWS = */ BK, // 16
+      /* short BCOLS = */ BD, // 128
       /* short kDstStrRow = */ LDV_tgp,
       /* short kDstStrCol = */ 1,
       /* short reduction_dim = */ 0,
@@ -169,13 +170,13 @@ template <
   constexpr short kFragSize = 8; // MMAFrag size
   using MMAFrag_acc_t = BaseMMAFrag<AccumType, kFragSize, kFragSize>;
 
-  constexpr int kNWarps = WM * WN;
+  constexpr int kNWarps = WM * WN; // 2 * 1 = 2
   static_assert(
       BQ >= (kNWarps * kFragSize) && BQ % (kNWarps * kFragSize) == 0,
       "Each simdgroup must host atleast 1 simdgroup matrix along Q sequence.");
 
   // Q seq frags per warp
-  constexpr int TQ = BQ / (kNWarps * kFragSize); // 32 / (4 * 8) = 1
+  constexpr int TQ = BQ / (kNWarps * kFragSize); // 16 / (2 * 8) = 1
   // KV sequence frags (all warps load the same frags)
   constexpr int TK = BK / kFragSize; // 16 / 8 = 2
   // HeadDim frags (all warps load the same frags)
@@ -195,7 +196,7 @@ template <
   const short2 simd_coord = MMAFrag_acc_t::get_coord(simd_lane_id);
   const short sm = simd_coord.y;
   const short sn = simd_coord.x;
-  const short tm = kFragSize * TQ * simd_group_id; // 8 * 1 * (0, 1, 2, 3) = 0, 8, 16, 24
+  const short tm = kFragSize * TQ * simd_group_id; // 8 * 1 * (0, 1) = 0, 8
 
   const short Qs_offset = (tm + sm) * LDQ_tgp + sn;
   const short Ks_offset = sm * LDK_tgp + sn;
@@ -267,7 +268,7 @@ template <
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
     STEEL_PRAGMA_UNROLL
-    for (short dd = 0; dd < TD; dd++) {
+    for (short dd = 0; dd < TD; dd++) { // TD = 32
       simdgroup_barrier(mem_flags::mem_none);
 
       Qtile.template load<T, 1, 1, BQ, 1>(
@@ -460,11 +461,7 @@ template <
   threadgroup_barrier(mem_flags::mem_none);
 
   // Store results
-  const short row_idx_smem = tm + sm; // 0, 1, 2, ..., 30, 31
-  const short seq_idx = row_idx_smem / params->gqa_factor; // 0, 0, ..., 0, 1, 1, ..., 1
-  const short head_idx = row_idx_smem % params->gqa_factor; // 0, 1, 2, ..., 15, 0, 1, 2, ..., 15
-
-  O += head_idx * params->O_strides[1] + seq_idx * params->O_strides[2] + sn;
+  O += (tm + sm) * params->O_strides[1] + sn;
 
   if (!align_Q && int(tid.x) == (params->NQ_aligned)) {
     auto dst_tile_dims = short2(BD - sn, params->qL_rem - (tm + sm));
