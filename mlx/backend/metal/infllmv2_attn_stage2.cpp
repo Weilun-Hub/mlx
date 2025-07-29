@@ -161,6 +161,7 @@ void infllmv2_attention_stage2_metal(
       /* int64_t V_strides[3] = */ {v.strides(0), v.strides(1), v.strides(2)},
       /* int64_t O_strides[3] = */ {o.strides(0), o.strides(1), o.strides(2)}};
 
+  printf("[DEBUG ZWL] qL_off: %d\n", params.qL_off);
   printf("[DEBUG ZWL] cu_seqlens_q: %d, %d\n", params.cu_seqlens_q[0], params.cu_seqlens_q[1]);
   printf("[DEBUG ZWL] cu_seqlens_k: %d, %d\n", params.cu_seqlens_k[0], params.cu_seqlens_k[1]);
 

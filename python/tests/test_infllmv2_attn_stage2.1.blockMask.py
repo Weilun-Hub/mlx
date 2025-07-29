@@ -18,7 +18,7 @@ D = 128
 NHEADS = 32
 NHEADS_K = 2
 BLOCK_SIZE = 64
-CAUSAL = False
+CAUSAL = True
 DTYPE = torch.float16
 SPARSITY = 0.8
 # SPARSITY = 0
@@ -505,14 +505,13 @@ def attention_blocksparse_ref(
         ) # (1, 1, 2048, 2048)
         print("local mask.shape", local_mask.shape)
         scores.masked_fill_(local_mask, float("-inf"))
-        
     
     scores.masked_fill_(rearrange(mixed_mask, "b h t s -> b h t s"), float("-inf"))
     
     # print("processed blockmask: ", rearrange(~base_blockmask, "h t s -> 1 h t s"))
     
     attention = torch.softmax(scores, dim=-1).to(v.dtype)
-     
+    
     if window_size[0] >= 0 or window_size[1] >= 0:
         attention = attention.masked_fill(torch.all(torch.bitwise_or(local_mask, rearrange(mixed_mask, "b h t s -> b h t s")), dim=-1, keepdim=True), 0.0)
     
@@ -758,7 +757,7 @@ if __name__ == "__main__":
     
     cu_seqlens_q_mlx = mx.array(cu_seqlens_q.detach().cpu().numpy())
     cu_seqlens_k_mlx = mx.array(cu_seqlens_k.detach().cpu().numpy())
-    out_mlx = mx.fast.infllmv2_attention_stage2(q_mlx, k_mlx, v_mlx, cu_seqlens_q_mlx, cu_seqlens_k_mlx, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, BLOCK_WINDOW_SIZE, scale=scale)
+    out_mlx = mx.fast.infllmv2_attention_stage2(q_mlx, k_mlx, v_mlx, cu_seqlens_q_mlx, cu_seqlens_k_mlx, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, BLOCK_WINDOW_SIZE, scale=scale, mask="causal")
     print("out_mlx.shape", out_mlx.shape)
     
     diff = mx.abs(out_mlx - out_ref_mlx)
@@ -767,11 +766,4 @@ if __name__ == "__main__":
     print(f"diff.min(): {diff.min():.4f}")
     print(f"pred.shape: {out_mlx.shape}")
     print(f"gt.shape  : {out_ref_mlx.shape}")
-    print(f"pred[0, 0, 0, 0 : 16]:")
-    print(np.array(out_mlx[0, 0, 0, : 16]))
-    # print(f"pred[0, 0, 0, 0]: {out_mlx[0, 0, 0, 0]:0b}")
-    print(f"gt[0, 0, 0, 0 : 16]:")
-    print(np.array(out_ref_mlx[0, 0, 0, : 16]))
-    print(f"blockmask_uint64.shape: {blockmask_uint64.shape}")
-    print(f"blockmask_uint64[0, 0, 0, 0]: {blockmask_uint64[0, 0, 0, 0]:0b}")
-    # exit()
+

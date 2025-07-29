@@ -223,7 +223,7 @@ template <
   int kb_lim = params->NK;
 
   if (do_causal) {
-    int q_max = (tid.x + 1) * BQ + params->qL_off;
+    int q_max = tid.x + 1 + params->qL_off;
     kb_lim = (q_max + BK - 1) / BK;
     kb_lim = min(params->NK, kb_lim);
   }
@@ -252,6 +252,13 @@ template <
 
   // Loop over KV seq length
   for (int kb = kb_lim - 1; kb >= 0; kb--) {
+
+    if (next_block_idx == -1) {
+      for (short i = 0; i < kRowsPT; ++i) {
+        sum_score[i] = Limits<AccumType>::finite_max;
+      }
+      break;
+    }
 
     bool skip = (next_block_idx != -1) && (next_block_idx < kb);
     
@@ -310,22 +317,24 @@ template <
     }
 
     // Mask out if causal
-    if (do_causal && kb >= (kb_lim - ((BQ + BK - 1) / BK) - int(!align_K))) {
-      using stile_t = decltype(Stile);
-      using selem_t = typename stile_t::elem_type;
-      constexpr auto neg_inf = Limits<selem_t>::finite_min;
+    if (!skip) {
+      if (do_causal && kb >= (kb_lim - ((BQ + BK - 1) / BK) - int(!align_K))) {
+        using stile_t = decltype(Stile);
+        using selem_t = typename stile_t::elem_type;
+        constexpr auto neg_inf = Limits<selem_t>::finite_min;
 
-      STEEL_PRAGMA_UNROLL
-      for (short i = 0; i < stile_t::kTileRows; i++) {
-        const int row_pos =
-            tid.x * BQ + params->qL_off + tm + sm + (i * stile_t::kFragRows);
+        const int row_pos = tid.x + params->qL_off + simd_group_id / 2;
+
         STEEL_PRAGMA_UNROLL
-        for (short j = 0; j < stile_t::kTileCols; j++) {
-          const int col_pos = kb * BK + sn + (j * stile_t::kFragCols);
+        for (short i = 0; i < stile_t::kTileRows; i++) {
           STEEL_PRAGMA_UNROLL
-          for (short jj = 0; jj < stile_t::MMAFrag_t::kElemCols; jj++) {
-            if (row_pos < (col_pos + jj)) {
-              Stile.frag_at(i, j)[jj] = neg_inf;
+          for (short j = 0; j < stile_t::kTileCols; j++) {
+            const int col_pos = kb * BK + sn + (j * stile_t::kFragCols);
+            STEEL_PRAGMA_UNROLL
+            for (short jj = 0; jj < stile_t::MMAFrag_t::kElemCols; jj++) {
+              if (row_pos < (col_pos + jj)) {
+                Stile.frag_at(i, j)[jj] = neg_inf;
+              }
             }
           }
         }
@@ -396,27 +405,31 @@ template <
       new_max[i] = max_score[i];
     }
 
-    // Row max
-    Stile.template row_reduce<MaxOp>(new_max);
+    if (!skip) {
+      // Row max
+      Stile.template row_reduce<MaxOp>(new_max);
 
-    // exp(Si - rowmax(Si))
-    Stile.template row_bin_op<ExpSubOp>(new_max);
+      // exp(Si - rowmax(Si))
+      Stile.template row_bin_op<ExpSubOp>(new_max);
 
-    // Factor exp(rowmax(Si) - rowmax(Si-1))
-    STEEL_PRAGMA_UNROLL
-    for (short i = 0; i < kRowsPT; ++i) {
-      factor[i] = fast::exp2(max_score[i] - new_max[i]);
+      // Factor exp(rowmax(Si) - rowmax(Si-1))
+      STEEL_PRAGMA_UNROLL
+      for (short i = 0; i < kRowsPT; ++i) {
+        factor[i] = fast::exp2(max_score[i] - new_max[i]);
+      }
+
+      // Save max for next iteration
+      STEEL_PRAGMA_UNROLL
+      for (short i = 0; i < kRowsPT; ++i) {
+        max_score[i] = new_max[i];
+      }
     }
 
-    // Save max for next iteration
-    STEEL_PRAGMA_UNROLL
-    for (short i = 0; i < kRowsPT; ++i) {
-      max_score[i] = new_max[i];
-    }
-
-    // Row Sum
+      // Row Sum
     AccumType sum_score_tmp[kRowsPT] = {0};
-    Stile.template row_reduce<SumOp>(sum_score_tmp);
+    if (!skip) {
+      Stile.template row_reduce<SumOp>(sum_score_tmp);
+    }
 
     // Update norm
     STEEL_PRAGMA_UNROLL
