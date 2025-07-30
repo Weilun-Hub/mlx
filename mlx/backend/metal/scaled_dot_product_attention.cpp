@@ -55,23 +55,23 @@ void sdpa_full_self_attention_metal(
   int bd = q.shape(-1);
   int bq = 32;
   int bk = bd < 128 ? 32 : 16;
-  printf("[DEBUG ZWL] bd: %d, bq: %d, bk: %d\n", bd, bq, bk);
+  // printf("[DEBUG ZWL] bd: %d, bq: %d, bk: %d\n", bd, bq, bk);
 
   int B = q.shape(0);
   int H = q.shape(1);
   int D = q.shape(3);
   int gqa_factor = q.shape(1) / k.shape(1);
-  printf("[DEBUG ZWL] B: %d, H: %d, D: %d, gqa_factor: %d\n", B, H, D, gqa_factor);
+  // printf("[DEBUG ZWL] B: %d, H: %d, D: %d, gqa_factor: %d\n", B, H, D, gqa_factor);
 
   int qL = q.shape(2);
   int kL = k.shape(2);
-  printf("[DEBUG ZWL] qL: %d, kL: %d\n", qL, kL);
+  // printf("[DEBUG ZWL] qL: %d, kL: %d\n", qL, kL);
 
   const bool align_Q = (qL % bq) == 0;
   const bool align_K = (kL % bk) == 0;
   const bool has_mask = !!mask;
   const bool do_causal = do_causal_;
-  printf("[DEBUG ZWL] align_Q: %d, align_K: %d, has_mask: %d, do_causal: %d\n", align_Q, align_K, has_mask, do_causal);
+  // printf("[DEBUG ZWL] align_Q: %d, align_K: %d, has_mask: %d, do_causal: %d\n", align_Q, align_K, has_mask, do_causal);
 
   metal::MTLFCList func_consts = {
       {&align_Q, MTL::DataType::DataTypeBool, 200},
@@ -91,7 +91,7 @@ void sdpa_full_self_attention_metal(
         << "_mask" << (type_to_name(has_mask ? *mask : q)); // clang-format on
 
   std::string base_name = kname.str();
-  printf("[DEBUG ZWL] base_name: %s\n", base_name.c_str());
+  // printf("[DEBUG ZWL] base_name: %s\n", base_name.c_str());
 
   // clang-format off
   kname << "_align_Q_" << (align_Q ? 't' : 'n')
@@ -100,7 +100,7 @@ void sdpa_full_self_attention_metal(
         << "_do_causal_" << (do_causal ? 't' : 'n'); // clang-format on
 
   std::string hash_name = kname.str();
-  printf("[DEBUG ZWL] hash_name: %s\n", hash_name.c_str());
+  // printf("[DEBUG ZWL] hash_name: %s\n", hash_name.c_str());
 
   auto& compute_encoder = d.get_command_encoder(s.index);
   auto kernel = d.get_kernel(base_name, hash_name, func_consts);
@@ -108,11 +108,11 @@ void sdpa_full_self_attention_metal(
 
   const int NQ = (qL + bq - 1) / bq;
   const int NK = (kL + bk - 1) / bk;
-  printf("[DEBUG ZWL] NQ: %d, NK: %d\n", NQ, NK);
+  // printf("[DEBUG ZWL] NQ: %d, NK: %d\n", NQ, NK);
 
   const int NQ_aligned = qL / bq;
   const int NK_aligned = kL / bk;
-  printf("[DEBUG ZWL] NQ_aligned: %d, NK_aligned: %d\n", NQ_aligned, NK_aligned);
+  // printf("[DEBUG ZWL] NQ_aligned: %d, NK_aligned: %d\n", NQ_aligned, NK_aligned);
 
   AttnParams params{
       /* int B = */ B,
@@ -147,7 +147,7 @@ void sdpa_full_self_attention_metal(
   compute_encoder.set_bytes(params, 4);
 
   if (mask) {
-    printf("[DEBUG ZWL] mask exists\n");
+    // printf("[DEBUG ZWL] mask exists\n");
     auto m = *mask;
 
     AttnMaskParams mask_params{/* int64_t M_strides[3] = */ {
@@ -159,8 +159,8 @@ void sdpa_full_self_attention_metal(
 
   MTL::Size grid_dims = MTL::Size(NQ, H, B);
   MTL::Size group_dims = MTL::Size(32, wm, wn);
-  printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", NQ, H, B);
-  printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", 32, wm, wn);
+  // printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", NQ, H, B);
+  // printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", 32, wm, wn);
   
   compute_encoder.dispatch_threadgroups(grid_dims, group_dims);
 }
@@ -383,11 +383,11 @@ bool ScaledDotProductAttention::use_fallback(
     bool do_causal,
     Stream s) {
   if (detail::in_grad_tracing()) {
-    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " ScaledDotProductAttention::use_fallback in grad tracing" << std::endl;
+    // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " ScaledDotProductAttention::use_fallback in grad tracing" << std::endl;
     return true;
   }
   if (s.device == Device::cpu) {
-    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " ScaledDotProductAttention::use_fallback on cpu" << std::endl;
+    // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " ScaledDotProductAttention::use_fallback on cpu" << std::endl;
     return true;
   }
 
@@ -413,7 +413,7 @@ bool ScaledDotProductAttention::use_fallback(
       (query_sequence_length <= key_sequence_length) &&
       sdpa_vector_supported_head_dim;
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " !(supports_sdpa_full || supports_sdpa_vector): " << !(supports_sdpa_full || supports_sdpa_vector) << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " !(supports_sdpa_full || supports_sdpa_vector): " << !(supports_sdpa_full || supports_sdpa_vector) << std::endl;
 
   return !(supports_sdpa_full || supports_sdpa_vector);
 }
@@ -433,10 +433,10 @@ void ScaledDotProductAttention::eval_gpu(
   auto& k_pre_shape = k_pre.shape();
   auto& v_pre_shape = v_pre.shape();
   auto& o_shape = o.shape();
-  printf("[DEBUG ZWL] q_pre.shape().size: %d, [%d, %d, %d, %d]\n", q_pre_shape.size(), q_pre_shape[0], q_pre_shape[1], q_pre_shape[2], q_pre_shape[3]);
-  printf("[DEBUG ZWL] k_pre.shape().size: %d, [%d, %d, %d, %d]\n", k_pre_shape.size(), k_pre_shape[0], k_pre_shape[1], k_pre_shape[2], k_pre_shape[3]);
-  printf("[DEBUG ZWL] v_pre.shape().size: %d, [%d, %d, %d, %d]\n", v_pre_shape.size(), v_pre_shape[0], v_pre_shape[1], v_pre_shape[2], v_pre_shape[3]);
-  printf("[DEBUG ZWL] o.shape().size: %d, [%d, %d, %d, %d]\n", o_shape.size(), o_shape[0], o_shape[1], o_shape[2], o_shape[3]);
+  // printf("[DEBUG ZWL] q_pre.shape().size: %d, [%d, %d, %d, %d]\n", q_pre_shape.size(), q_pre_shape[0], q_pre_shape[1], q_pre_shape[2], q_pre_shape[3]);
+  // printf("[DEBUG ZWL] k_pre.shape().size: %d, [%d, %d, %d, %d]\n", k_pre_shape.size(), k_pre_shape[0], k_pre_shape[1], k_pre_shape[2], k_pre_shape[3]);
+  // printf("[DEBUG ZWL] v_pre.shape().size: %d, [%d, %d, %d, %d]\n", v_pre_shape.size(), v_pre_shape[0], v_pre_shape[1], v_pre_shape[2], v_pre_shape[3]);
+  // printf("[DEBUG ZWL] o.shape().size: %d, [%d, %d, %d, %d]\n", o_shape.size(), o_shape[0], o_shape[1], o_shape[2], o_shape[3]);
 
   std::vector<array> copies;
 
@@ -462,7 +462,7 @@ void ScaledDotProductAttention::eval_gpu(
 
   // We are in vector mode ie single query
   if (q_pre.shape(2) <= 8) {
-    printf("[DEBUG ZWL] q_pre.shape(2) <= 8, vector mode\n");
+    // printf("[DEBUG ZWL] q_pre.shape(2) <= 8, vector mode\n");
     auto q_copy_unless = [](const array& arr) {
       if (arr.flags().row_contiguous) {
         return true;
@@ -531,7 +531,7 @@ void ScaledDotProductAttention::eval_gpu(
 
   // Full attention mode
   else {
-    printf("[DEBUG ZWL] q_pre.shape(2) > 8, full attention mode\n");
+    // printf("[DEBUG ZWL] q_pre.shape(2) > 8, full attention mode\n");
     const auto& q = copy_unless(is_matrix_contiguous, q_pre);
     const auto& k = copy_unless(is_matrix_contiguous, k_pre);
     const auto& v = copy_unless(is_matrix_contiguous, v_pre);
@@ -541,7 +541,7 @@ void ScaledDotProductAttention::eval_gpu(
     int64_t str_oL = o.shape(1) * str_oH; // 32 * 128 = 4096
     int64_t str_oB = o.shape(2) * str_oL; // 2048 * 4096 = 8388608
     size_t data_size = o.shape(0) * str_oB; // 1 * 8388608 = 8388608
-    printf("[DEBUG ZWL] str_oD: %d, str_oH: %d, str_oL: %d, str_oB: %d, data_size: %zu\n", str_oD, str_oH, str_oL, str_oB, data_size);
+    // printf("[DEBUG ZWL] str_oD: %d, str_oH: %d, str_oL: %d, str_oB: %d, data_size: %zu\n", str_oD, str_oH, str_oL, str_oB, data_size);
 
     array::Flags flags{
         /* bool contiguous = */ 1,
