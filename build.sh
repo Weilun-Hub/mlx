@@ -34,10 +34,10 @@ cd python/tests
 # echo "+-------------------------------------------+"
 # python test_infllmv2_attn_stage2.py
 
-echo "+-------------------------------------------+"
-echo "|Running tests infllmv2_attn_stage2          |"
-echo "+-------------------------------------------+"
-python test_infllmv2_attn_stage2.1.blockMask.py
+# echo "+-------------------------------------------+"
+# echo "|Running tests infllmv2_attn_stage2          |"
+# echo "+-------------------------------------------+"
+# python test_infllmv2_attn_stage2.1.blockMask.py
 
 echo "+-------------------------------------------+"
 echo "|Done!                                      |"

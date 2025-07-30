@@ -329,7 +329,7 @@ class InfLLMV2AttentionStage2 : public Custom {
 
   void eval_gpu(const std::vector<array>& inputs, std::vector<array>& outputs)
       override {
-    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage2::eval_gpu" << std::endl;
+    // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage2::eval_gpu" << std::endl;
     eval_gpu(inputs, outputs[0]);
   }
 

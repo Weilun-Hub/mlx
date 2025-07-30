@@ -794,7 +794,7 @@ array infllmv2_attention_stage1(
   bool has_arr_mask = false;
   bool has_bool_mask = false;
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " mask_mode: " << mask_mode << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " mask_mode: " << mask_mode << std::endl;
 
   if (mask_mode == "causal") {
     has_mask = true;
@@ -954,7 +954,7 @@ array infllmv2_attention_stage1(
   }
   if (!InfLLMV2AttentionStage1::use_fallback(
           q, k, v, has_mask, has_arr_mask, do_causal, stream)) {
-    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage1::use_fallback false" << std::endl;
+    // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage1::use_fallback false" << std::endl;
     // auto out_shape = Shape{q.shape(0), q.shape(1), q.shape(2), v.shape(-1)};
     auto out_shape = Shape{q.shape(0), q.shape(1) / 16, q.shape(2), k.shape(2)}; // batch, head, q_len, k_len
     return array(
@@ -1011,7 +1011,7 @@ array infllmv2_attention_stage2(
   bool has_arr_mask = false;
   bool has_bool_mask = false;
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " mask_mode: " << mask_mode << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " mask_mode: " << mask_mode << std::endl;
 
   if (mask_mode == "causal") {
     has_mask = true;
@@ -1128,7 +1128,7 @@ array infllmv2_attention_stage2(
   }
   if (!InfLLMV2AttentionStage2::use_fallback(
           q, k, v, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, block_window_size, has_mask, has_arr_mask, do_causal, stream)) {
-    std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage2::use_fallback false" << std::endl;
+    // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " InfLLMV2AttentionStage2::use_fallback false" << std::endl;
     auto out_shape = Shape{q.shape(0), q.shape(1), q.shape(2), v.shape(-1)};
     return array(
         std::move(out_shape),
