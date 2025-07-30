@@ -15,8 +15,8 @@ NUM_BLOCK = 219
 
 if __name__ == "__main__":
     
-    block_score = np.fromfile("./block_score.2x14001x219.fp16.bin", dtype=np.float16).reshape(BATCH_SIZE, NUM_HEAD, LEN_Q, NUM_BLOCK)
-    topk_index = np.fromfile("./topk_idx.2x14001x64.int32.bin", dtype=np.int32).reshape(BATCH_SIZE, NUM_HEAD, LEN_Q, TOPK)
+    block_score = np.fromfile("./data/block_score.2x14001x219.fp16.bin", dtype=np.float16).reshape(BATCH_SIZE, NUM_HEAD, LEN_Q, NUM_BLOCK)
+    topk_index = np.fromfile("./data/topk_idx.2x14001x64.int32.bin", dtype=np.int32).reshape(BATCH_SIZE, NUM_HEAD, LEN_Q, TOPK)
     print(block_score.shape)
 
     block_score_mx = mx.array(block_score)

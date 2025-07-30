@@ -2358,18 +2358,18 @@ array topk(const array& a, int k, int axis, StreamOrDevice s /* = {}*/) {
     return a;
   }
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k = " << k << " axis = " << axis_ << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k = " << k << " axis = " << axis_ << std::endl;
 
   array a_partitioned = partition(a, -k, axis_, s);
   // array a_partitioned = argpartition(a, -k, axis_, s);
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a_partitioned.shape() = " << a_partitioned.shape() << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a_partitioned.shape() = " << a_partitioned.shape() << std::endl;
   Shape slice_starts(a.ndim(), 0);
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a.ndim() = " << a.ndim() << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a.ndim() = " << a.ndim() << std::endl;
   auto slice_ends = a.shape();
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_ends = " << slice_ends << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_ends = " << slice_ends << std::endl;
   slice_starts[axis_] = a.shape(axis_) - k;
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
   return slice(a_partitioned, slice_starts, slice_ends, s);
 }
 
@@ -2401,19 +2401,19 @@ array argtopk(const array& a, int k, int axis, StreamOrDevice s /* = {}*/) {
     return a;
   }
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k = " << k << " axis = " << axis_ << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k = " << k << " axis = " << axis_ << std::endl;
 
   // array a_partitioned = partition(a, -k, axis_, s);
   array a_partitioned = argpartition(-a, k, axis_, s);
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a_partitioned.shape() = " << a_partitioned.shape() << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a_partitioned.shape() = " << a_partitioned.shape() << std::endl;
   Shape slice_starts(a.ndim(), 0);
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a.ndim() = " << a.ndim() << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " a.ndim() = " << a.ndim() << std::endl;
   auto slice_ends = a.shape();
   slice_ends[axis_] = k;
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_ends = " << slice_ends << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_ends = " << slice_ends << std::endl;
   // slice_starts[axis_] = a.shape(axis_) - k;
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " slice_starts = " << slice_starts << std::endl;
   // sort(const array& a, int axis, StreamOrDevice s /* = {} */)
   auto a_sliced = slice(a_partitioned, slice_starts, slice_ends, s);
   return sort(a_sliced, axis_, s);
