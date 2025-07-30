@@ -36,7 +36,7 @@ template <typename T, int THREADGROUP_SIZE = 128>
     if (k < params->init_blocks) {
       max_val = pos_inf;
     } else if (q_block - params->local_blocks < k) {
-      max_val = neg_inf;
+      max_val = pos_inf; // neg_inf in cuda impl
     } else {
       max_val = in_ptr[start];
       for (int i = start + 1; i < end; i++) {

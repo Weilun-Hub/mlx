@@ -97,7 +97,7 @@ if __name__ == "__main__":
     
     score_npy = np.random.normal(0.0, 1.0, (BATCH_SIZE, NUM_HEAD, LEN_Q, LEN_K)).astype(DTYPE)
 
-    gt = np.fromfile("./output.bin", dtype=DTYPE).reshape(BATCH_SIZE, NUM_HEAD, LEN_Q, (LEN_Q + BLOCK_SIZE - 1) // BLOCK_SIZE)
+    gt = np.fromfile("./data/output.bin", dtype=DTYPE).reshape(BATCH_SIZE, NUM_HEAD, LEN_Q, (LEN_Q + BLOCK_SIZE - 1) // BLOCK_SIZE)
     gt[gt == np.inf] = 65504
     gt[gt == -np.inf] = -65504
     print(gt.shape)
