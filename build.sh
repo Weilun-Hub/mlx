@@ -3,7 +3,7 @@ echo "|Building mlx                               |"
 echo "+-------------------------------------------+"
 python setup.py build_ext --inplace
 
-cd python/tests
+# cd python/tests
 # echo "+-------------------------------------------+"
 # echo "|Running tests scaled_dot_product_attention |"
 # echo "+-------------------------------------------+"

@@ -67,10 +67,10 @@ struct DivOp {
 // clang-format off
 template <
     typename T,
-    int BQ, // 32
+    int BQ, // 16
     int BK, // 16
     int BD, // 128
-    int WM, // 4
+    int WM, // 2
     int WN, // 1
     typename MaskType = float,
     typename AccumType = float>
@@ -98,7 +98,7 @@ template <
 
   O += tidl.z * params->O_strides[0] + // Batch
     tidl.y * params->O_strides[1] + // group
-    tidl.x * 2 * params->O_strides[2]; // Sequence, each block process q_len of 2
+    tidl.x * params->O_strides[2]; // Sequence, each block process q_len of 1
 
   if (has_mask) {
     mask += tidl.z * mask_params->M_strides[0] + // Batch
@@ -116,7 +116,7 @@ template <
 
   constexpr short tgp_mem_0 = (BK + padK) * (BD); // (16 + 8) * 128 = 3072
   constexpr short tgp_mem_1 = BK * (BD + padV); // 16 * (128 + 8) = 2176
-  constexpr short tgp_mem_2 = BQ * (BK + padK); // 32 * (16 + 8) = 768
+  constexpr short tgp_mem_2 = BQ * (BK + padK); // 16 * (16 + 8) = 384
   constexpr short tgp_mem_s_ = tgp_mem_0 > tgp_mem_1 ? tgp_mem_0 : tgp_mem_1; // 3072
   constexpr short tgp_mem_s = tgp_mem_2 > tgp_mem_s_ ? tgp_mem_2 : tgp_mem_s_; // 3072
 
@@ -139,9 +139,9 @@ template <
 
   Q += tidl.z * params->Q_strides[0] + // Batch
     + tidl.y * params->gqa_factor * params->Q_strides[1] // tidl.y is head group idx, 16 heads in a group
-    + tidl.x * 2 * params->Q_strides[2]; // Sequence, 2 = seq len q to process per block
+    + tidl.x * params->Q_strides[2]; // Sequence, 1 = seq len q to process per block
 
-  static_assert(BQ == 32, "BQ must be 32");
+  static_assert(BQ == 16, "BQ must be 16");
   const short q_Smem_col = simd_group_id * 32 + simd_lane_id;
 
   const T scale_ = static_cast<T>(params->scale * 1.44269504089);
@@ -149,7 +149,7 @@ template <
   threadgroup_barrier(mem_flags::mem_none);
   for (int head_idx = 0; head_idx < params->gqa_factor; ++head_idx) { // gqa_factor = 16, a.k.a. head in a group
     Q_smem[head_idx * (BD + padQ) + q_Smem_col] = Q[head_idx * params->Q_strides[1] + q_Smem_col] * scale_;
-    Q_smem[(head_idx + params->gqa_factor) * (BD + padQ) + q_Smem_col] = Q[head_idx * params->Q_strides[1] + params->Q_strides[2] + q_Smem_col] * scale_;
+    Q_smem[head_idx * (BD + padQ) + q_Smem_col + 64] = Q[head_idx * params->Q_strides[1] + q_Smem_col + 64] * scale_;
   }
   threadgroup_barrier(mem_flags::mem_none);
 
@@ -185,13 +185,13 @@ template <
   constexpr short kFragSize = 8; // MMAFrag size
   using MMAFrag_acc_t = BaseMMAFrag<AccumType, kFragSize, kFragSize>; // 8 * 8
 
-  constexpr int kNWarps = WM * WN; // 4 * 1 = 4
+  constexpr int kNWarps = WM * WN; // 2 * 1 = 2
   static_assert(
       BQ >= (kNWarps * kFragSize) && BQ % (kNWarps * kFragSize) == 0,
       "Each simdgroup must host atleast 1 simdgroup matrix along Q sequence.");
 
   // Q seq frags per warp
-  constexpr int TQ = BQ / (kNWarps * kFragSize); // 32 / (4 * 8) = 1
+  constexpr int TQ = BQ / (kNWarps * kFragSize); // 16 / (2 * 8) = 1
   // KV sequence frags (all warps load the same frags)
   constexpr int TK = BK / kFragSize; // 16 / 8 = 2
   // HeadDim frags (all warps load the same frags)
@@ -207,7 +207,7 @@ template <
   const short2 simd_coord = MMAFrag_acc_t::get_coord(simd_lane_id);
   const short sm = simd_coord.y;
   const short sn = simd_coord.x;
-  const short tm = kFragSize * TQ * simd_group_id; // 8 * 1 * (0, 1, 2, 3) = 0, 8, 16, 24
+  const short tm = kFragSize * TQ * simd_group_id; // 8 * 1 * (0, 1) = 0, 8
 
   // in ONE simdgroup (8 x 8)
   const short Qs_offset = (tm + sm) * LDQ_tgp + sn; // LDQ_tgp = BD + padQ = 128 + 8 = 136
@@ -235,6 +235,13 @@ template <
   }
 
   int kb_lim = params->NK; // 8 iters over k
+
+  if (do_causal) {
+    int q_max = tid.x + 1;
+    kb_lim = (q_max + BK - 1) / BK;
+    kb_lim = kb_lim / 16 + 1;
+    kb_lim = min(params->NK, kb_lim);
+  }
 
   // 1st Loop over KV seq length to prepare max and row sum for softmax
   for (int kb = 0; kb < kb_lim; kb++) { // 0, 1, 2, 3, 4, 5, 6, 7
@@ -292,7 +299,7 @@ template <
       using selem_t = typename stile_t::elem_type;
       constexpr auto neg_inf = Limits<selem_t>::finite_min;
 
-      const int row_pos = /* start q pos of current block */ tidl.x * 2 + /* q offset of current thread */ simd_group_id / 2;
+      const int row_pos = /* start q pos of current block */ tidl.x + /* q offset of current thread */ simd_group_id / 2;
 
       STEEL_PRAGMA_UNROLL
       for (short i = 0; i < stile_t::kTileRows; i++) {
@@ -452,7 +459,7 @@ template <
       using selem_t = typename stile_t::elem_type;
       constexpr auto neg_inf = Limits<selem_t>::finite_min;
 
-      const int row_pos = /* start q pos of current block */ tidl.x * 2 + /* q offset of current thread */ simd_group_id / 2;
+      const int row_pos = /* start q pos of current block */ tidl.x + /* q offset of current thread */ simd_group_id / 2;
 
       STEEL_PRAGMA_UNROLL
       for (short i = 0; i < stile_t::kTileRows; i++) {

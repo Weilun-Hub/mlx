@@ -237,7 +237,7 @@ void init_fast(nb::module_& parent_module) {
             has_mask && std::holds_alternative<std::string>(mask);
         bool has_arr_mask = has_mask && std::holds_alternative<mx::array>(mask);
 
-        std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " infllmv2_attention_stage1" << std::endl;
+        // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " infllmv2_attention_stage1" << std::endl;
 
         if (has_mask) {
           if (has_str_mask) {
@@ -257,7 +257,7 @@ void init_fast(nb::module_& parent_module) {
           }
 
         } else {
-          std::cout << "[DEBUG ZWL] " << __FILE__ << ":" << __LINE__ << " infllmv2_attention_stage1 no mask" << std::endl;
+          // std::cout << "[DEBUG ZWL] " << __FILE__ << ":" << __LINE__ << " infllmv2_attention_stage1 no mask" << std::endl;
           return mx::fast::infllmv2_attention_stage1(
               queries, keys, values, scale, "", {}, s);
         }
