@@ -2530,23 +2530,23 @@ array topk_to_uint64(
     throw std::invalid_argument("[topk_to_uint64] Received array with " + std::to_string(a.ndim()) + " dimensions, expected 4.");
   }
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " max_seqlen_k = " << max_seqlen_k << " block_size = " << block_size << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " max_seqlen_k = " << max_seqlen_k << " block_size = " << block_size << std::endl;
 
   int batch = a.shape(0);
   int num_head = a.shape(1);
   int seq_len = a.shape(2);
   int k = a.shape(3);
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " batch = " << batch << " num_head = " << num_head << " seq_len = " << seq_len << " k = " << k << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " batch = " << batch << " num_head = " << num_head << " seq_len = " << seq_len << " k = " << k << std::endl;
 
   int k_blocks = (max_seqlen_k + block_size - 1) / block_size;
   int last_dim = (k_blocks + 64 - 1) / 64;
 
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k_blocks = " << k_blocks << " last_dim = " << last_dim << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " k_blocks = " << k_blocks << " last_dim = " << last_dim << std::endl;
 
   auto dtype = uint64;
   auto out_shape = {batch, num_head, seq_len, last_dim};
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " out_shape = " << out_shape << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " out_shape = " << out_shape << std::endl;
   auto out = array(
       std::move(out_shape),
       dtype,

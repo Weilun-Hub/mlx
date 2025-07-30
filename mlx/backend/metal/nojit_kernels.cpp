@@ -92,7 +92,7 @@ MTL::ComputePipelineState* get_topk_to_uint64_kernel(
     metal::Device& d,
     const std::string& kernel_name,
     const array&) {
-  std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " kernel_name: " << kernel_name << std::endl;
+  // std::cout << "[DEBUG ZWL] " << __FILE__ << " : " << __LINE__ << " kernel_name: " << kernel_name << std::endl;
   return d.get_kernel(kernel_name);
 }
   
