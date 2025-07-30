@@ -38,18 +38,18 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   assert(in.flags().row_contiguous);
   out.set_data(allocator::malloc(out.nbytes()));
 
-  printf("[DEBUG ZWL] in.shape: %d, %d, %d, %d\n", in.shape(0), in.shape(1), in.shape(2), in.shape(3));
+  // printf("[DEBUG ZWL] in.shape: %d, %d, %d, %d\n", in.shape(0), in.shape(1), in.shape(2), in.shape(3));
 
   int axis_size = in.shape().back();
-  printf("[DEBUG ZWL] axis_size: %d\n", axis_size);
+  // printf("[DEBUG ZWL] axis_size: %d\n", axis_size);
   int n_rows = in.data_size() / axis_size;
-  printf("[DEBUG ZWL] n_rows: %d\n", n_rows);
+  // printf("[DEBUG ZWL] n_rows: %d\n", n_rows);
 
   int batch_size = in.shape(0);
   int num_head = in.shape(1);
   int q_len = in.shape(2);
   int k_len = in.shape(3);
-  printf("[DEBUG ZWL] batch_size: %d, num_head: %d, q_len: %d, k_len: %d\n", batch_size, num_head, q_len, k_len);
+  // printf("[DEBUG ZWL] batch_size: %d, num_head: %d, q_len: %d, k_len: %d\n", batch_size, num_head, q_len, k_len);
 
   const int simd_size = 32;
   const int n_reads = 4;
@@ -57,8 +57,8 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   std::string kernel_name = "maxpooling_";
   kernel_name += type_to_name(out);
 
-  printf("[DEBUG ZWL] in.strides: %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2));
-  printf("[DEBUG ZWL] out.strides: %d, %d, %d\n", out.strides(0), out.strides(1), out.strides(2));
+  // printf("[DEBUG ZWL] in.strides: %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2));
+  // printf("[DEBUG ZWL] out.strides: %d, %d, %d\n", out.strides(0), out.strides(1), out.strides(2));
 
   MaxPoolingParams params{
     /* cache_len = */ cache_len_,
@@ -80,8 +80,8 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
     MTL::Size grid_dims = MTL::Size(q_len, num_head, 1);
     MTL::Size group_dims = MTL::Size(threadgroup_size, 1, 1);
 
-    printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", q_len, num_head, 1);
-    printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", threadgroup_size, 1, 1);
+    // printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", q_len, num_head, 1);
+    // printf("[DEBUG ZWL] group_dims: %d, %d, %d\n", threadgroup_size, 1, 1);
 
     compute_encoder.set_compute_pipeline_state(kernel);
     compute_encoder.set_input_array(in, 0);
