@@ -70,9 +70,11 @@ struct BlockMaskIterator {
 
     int blockmask_idx = k_block_idx / this->num_block_per_blockmask; // blockmask_idx = k_block_idx / 4
 
-    int blockmask_uint64_idx = blockmask_idx / 64;
+    // int blockmask_uint64_idx = blockmask_idx / 64;
+    int blockmask_uint64_idx = blockmask_idx >> 6;
 
-    int blockmask_uint64_bit_idx = blockmask_idx % 64;
+    // int blockmask_uint64_bit_idx = blockmask_idx % 64;
+    int blockmask_uint64_bit_idx = blockmask_idx & 63;
 
     uint64_t bit_pos_in_1_uint64 = blockmask_uint64_bit_idx != 63 ? (1ULL << (blockmask_uint64_bit_idx + 1)) - 1 : 0xFFFFFFFFFFFFFFFFULL;
 
@@ -90,13 +92,15 @@ struct BlockMaskIterator {
 
     if (mask != 0) {
       int highest_bit = 63 - clzll(mask);
-      target_blockmask_idx = highest_bit + blockmask_uint64_idx * 64;
+      // target_blockmask_idx = highest_bit + blockmask_uint64_idx * 64;
+      target_blockmask_idx = highest_bit + (blockmask_uint64_idx << 6);
     } else {
       for (int i = blockmask_uint64_idx - 1; i >= 0; --i) {
         mask = blockmask_ptr[i];
         if (mask != 0) {
           int highest_bit = 63 - clzll(mask);
-          target_blockmask_idx = highest_bit + i * 64;
+          // target_blockmask_idx = highest_bit + i * 64;
+          target_blockmask_idx = highest_bit + (i << 6);
           break;
         }
       }

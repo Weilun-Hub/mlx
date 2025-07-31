@@ -273,7 +273,9 @@ template <
     }
 
     // Do S = Q @ K.T
-    Stile.clear();
+    if (!skip) {
+      Stile.clear();
+    }
 
     if (!skip) {
       threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -290,8 +292,8 @@ template <
 
         tile_matmad(Stile, Qtile, Ktile, Stile);
       }
-    } else {
-      Stile.set(Limits<AccumType>::finite_min);
+    // } else {
+    //   Stile.set(Limits<AccumType>::finite_min);
     }
 
 
@@ -400,9 +402,11 @@ template <
     // Temp variables
     AccumType new_max[kRowsPT];
     AccumType factor[kRowsPT];
-    STEEL_PRAGMA_UNROLL
-    for (short i = 0; i < kRowsPT; ++i) {
-      new_max[i] = max_score[i];
+    if (!skip) {
+      STEEL_PRAGMA_UNROLL
+      for (short i = 0; i < kRowsPT; ++i) {
+        new_max[i] = max_score[i];
+      }
     }
 
     if (!skip) {
@@ -432,9 +436,9 @@ template <
     }
 
     // Update norm
-    STEEL_PRAGMA_UNROLL
-    for (short i = 0; i < kRowsPT; ++i) {
-      if (!skip) {
+    if (!skip) {
+      STEEL_PRAGMA_UNROLL
+      for (short i = 0; i < kRowsPT; ++i) {
         sum_score[i] = sum_score[i] * factor[i] + sum_score_tmp[i];
       }
     }
