@@ -542,6 +542,12 @@ template <
     
     Stile.template col_reduce<SumOp>();
 
+    if (do_causal) {
+      if (tid.x < 31) {
+        Stile.clear();
+      }
+    }
+
     simdgroup_barrier(mem_flags::mem_none);
     if ((simd_group_id % 2) == 0 && sm == 0) {
       Stile.template store<T, 1, 1>(O + (simd_group_id / 2) * params->O_strides[2] + kb * BK + sn, params->O_strides[2]);

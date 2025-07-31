@@ -243,6 +243,7 @@ void InfLLMV2AttentionStage1::eval_gpu(
   auto& k_pre_shape = k_pre.shape();
   auto& v_pre_shape = v_pre.shape();
   auto& o_shape = o.shape();
+  // printf("[DEBUG ZWL] o.strides(0): %d, o.strides(1): %d, o.strides(2): %d, o.strides(3): %d\n", o.strides(0), o.strides(1), o.strides(2), o.strides(3));
   // printf("[DEBUG ZWL] q_pre.shape().size: %d, [%d, %d, %d, %d]\n", q_pre_shape.size(), q_pre_shape[0], q_pre_shape[1], q_pre_shape[2], q_pre_shape[3]);
   // printf("[DEBUG ZWL] k_pre.shape().size: %d, [%d, %d, %d, %d]\n", k_pre_shape.size(), k_pre_shape[0], k_pre_shape[1], k_pre_shape[2], k_pre_shape[3]);
   // printf("[DEBUG ZWL] v_pre.shape().size: %d, [%d, %d, %d, %d]\n", v_pre_shape.size(), v_pre_shape[0], v_pre_shape[1], v_pre_shape[2], v_pre_shape[3]);

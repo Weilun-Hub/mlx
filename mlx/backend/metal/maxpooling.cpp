@@ -34,6 +34,7 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   };
 
   auto in = ensure_contiguous(inputs[0]);
+  // const auto& in = inputs[0];
 
   assert(in.flags().row_contiguous);
   out.set_data(allocator::malloc(out.nbytes()));
@@ -57,9 +58,12 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   std::string kernel_name = "maxpooling_";
   kernel_name += type_to_name(out);
 
-  // printf("[DEBUG ZWL] in.strides: %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2));
-  // printf("[DEBUG ZWL] out.strides: %d, %d, %d\n", out.strides(0), out.strides(1), out.strides(2));
+  int out_len = out.shape(3);
 
+  // printf("[DEBUG ZWL] in.strides: %d, %d, %d\n", num_head * q_len * k_len, q_len * k_len, k_len);
+  // printf("[DEBUG ZWL] in.strides: %d, %d, %d, %d\n", in.strides(0), in.strides(1), in.strides(2), in.strides(3));
+  // printf("[DEBUG ZWL] out.strides: %d, %d, %d\n", out.strides(0), out.strides(1), out.strides(2));
+  // printf("[DEBUG ZWL] cache_len: %d, init_blocks: %d, local_blocks: %d, kernel_size: %d, stride: %d, padding: %d, block_size: %d\n", cache_len_, init_blocks_, local_blocks_, kernel_size_, stride_, padding_, block_size_);
   MaxPoolingParams params{
     /* cache_len = */ cache_len_,
     /* init_blocks = */ init_blocks_,
@@ -68,7 +72,10 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
     /* stride = */ stride_,
     /* padding = */ padding_,
     /* block_size = */ block_size_,
+    /* k_len = */ k_len,
+    /* out_len = */ out_len,
     /* in_strides = */ {in.strides(0), in.strides(1), in.strides(2)},
+    // /* in_strides = */ {num_head * q_len * k_len, q_len * k_len, k_len},
     /* out_strides = */ {out.strides(0), out.strides(1), out.strides(2)}
   };
 
@@ -77,7 +84,7 @@ void MaxPooling::eval_gpu(const std::vector<array>& inputs, array& out) {
   {
     size_t threadgroup_size = 128;
 
-    MTL::Size grid_dims = MTL::Size(q_len, num_head, 1);
+    MTL::Size grid_dims = MTL::Size(q_len, num_head, batch_size);
     MTL::Size group_dims = MTL::Size(threadgroup_size, 1, 1);
 
     // printf("[DEBUG ZWL] grid_dims: %d, %d, %d\n", q_len, num_head, 1);

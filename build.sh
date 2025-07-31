@@ -39,6 +39,11 @@ python setup.py build_ext --inplace
 # echo "+-------------------------------------------+"
 # python test_infllmv2_attn_stage2.1.blockMask.py
 
+# echo "+-------------------------------------------+"
+# echo "|Running tests infllmv2_end2end             |"
+# echo "+-------------------------------------------+"
+# python test_infllmv2_end2end.debug.py
+
 echo "+-------------------------------------------+"
 echo "|Done!                                      |"
 echo "+-------------------------------------------+"
