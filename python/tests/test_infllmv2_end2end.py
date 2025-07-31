@@ -12,7 +12,7 @@ NUM_KEY_VALUE_HEADS = 2
 HEAD_DIM = 128
 # Q_LEN = 2048
 Q_LEN = 1
-K_LEN = 128 * 1024
+K_LEN = 16 * 1024
 COMPRESSED_K_LEN = K_LEN // 16
 print(f"[DEBUG] COMPRESSED_K_LEN: {COMPRESSED_K_LEN}")
 TOPK = 64
@@ -32,7 +32,7 @@ MLX_MASK = "causal" if TORCH_MASK else None
 TEST_ITERS_INFLLMV2 = 10
 TEST_ITERS_FA = 10
 
-TEST_FA = False
+TEST_FA = True
 
 np.set_printoptions(linewidth=np.inf)
 np.set_printoptions(precision=4, suppress=True)
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         print(f"[DEBUG] v_mlx.shape: {v_mlx.shape}")
 
         # warmup
-        o_mlx = mx.fast.scaled_dot_product_attention(q_mlx, k_mlx, v_mlx, scale=scale)
+        o_mlx = mx.fast.scaled_dot_product_attention(q_mlx, k_mlx, v_mlx, scale=scale, mask="causal")
         # tmp = o_mlx[0, 0, 0, 0]
         print(f"[DEBUG] o_mlx[0, 0, 0, 0]: {o_mlx[0, 0, 0, 0]}")
 
@@ -74,7 +74,7 @@ if __name__ == "__main__":
                 torch.mps.empty_cache()
                 start_event.record()
 
-                # o_mlx = mx.fast.scaled_dot_product_attention(q_mlx, k_mlx, v_mlx, scale=scale)
+                o_mlx = mx.fast.scaled_dot_product_attention(q_mlx, k_mlx, v_mlx, scale=scale, mask="causal")
                 # tmp += o_mlx[0, 0, 0, 0]
                 print(f"[DEBUG] o_mlx[0, 0, 0, 0]: {o_mlx[0, 0, 0, 0]}")
 
