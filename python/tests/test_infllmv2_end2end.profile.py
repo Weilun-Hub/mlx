@@ -13,9 +13,9 @@ BATCH_SIZE = 1
 NUM_ATTN_HEADS = 32
 NUM_KEY_VALUE_HEADS = 2
 HEAD_DIM = 128
-Q_LEN = 2048
-# Q_LEN = 1
-K_LEN = 128 * 1024 # here K_LEN is the sum of current k len and historical k len
+# Q_LEN = 2048
+Q_LEN = 1
+K_LEN = 16 * 1024 # here K_LEN is the sum of current k len and historical k len
 COMPRESSED_K_LEN = K_LEN // 16
 print(f"[DEBUG] COMPRESSED_K_LEN: {COMPRESSED_K_LEN}")
 CACHE_LEN = K_LEN - Q_LEN

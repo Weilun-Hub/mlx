@@ -576,9 +576,9 @@ if __name__ == "__main__":
 
         diff = np.abs(blockmask_uint64_ref - blockmask_uint64_npy)
         print(f"[DEBUG] diff.shape: {diff.shape}, min diff: {np.min(diff):.4f}, max diff: {np.max(diff):.4f}")
-        # for i in range(16):
-        #     print(f"[DEBUG] blockmask_uint64[0, 0, -1, {i}]: {blockmask_uint64[0, 0, -16, i]:0b}")
-        #     print(f"[DEBUG] blockmask_uint64[0, 0, -1, {i}]: {blockmask_uint64[0, 0, -16, i]:0b}")
+        for i in range(4):
+            print(f"[DEBUG] blockmask_uint64[0, 0, 0, {i}]: {blockmask_uint64[0, 0, 0, i]:0b}")
+            # print(f"[DEBUG] blockmask_uint64[0, 0, 0, {i}]: {blockmask_uint64[0, 0, -16, i]:0b}")
     # block sparse attention
     out_mlx = mx.fast.infllmv2_attention_stage2(q_mlx, k_mlx, v_mlx, cu_seqlens_q_mlx, cu_seqlens_k_mlx, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, BLOCK_WINDOW_SIZE, scale=scale, mask="causal")
     
@@ -612,7 +612,7 @@ if __name__ == "__main__":
         # print(f"[DEBUG] base_blockmask[0, 0, 0, 0]: {base_blockmask[0, 0, 0, 0]}")
         # exit()
     
-    # print(f"[DEBUG] out_mlx.shape: {out_mlx.shape}")
-    # print(f"[DEBUG] out_mlx[0, 0, 0, 0]: {out_mlx[0, 0, 0, 0]}")
+    print(f"[DEBUG] out_mlx.shape: {out_mlx.shape}")
+    print(f"[DEBUG] out_mlx[0, 0, 0, 0]: {out_mlx[0, 0, 0, 0]}")
     
     

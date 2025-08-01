@@ -172,8 +172,8 @@ if __name__ == "__main__":
             # print(f"[DEBUG] pooled_score[0, 0, 0, 0]: {pooled_score[0, 0, 0, 0]}")
             # topk_idx = mx.argtopk(pooled_score, TOPK, axis=-1)
             # print(f"[DEBUG] topk_idx[0, 0, 0, 0]: {topk_idx[0, 0, 0, 0]}")
-            blockmask_uint64 = mx.topk_to_uint64(topk_idx, K_LEN, BLOCK_SIZE)
-            print(f"[DEBUG] blockmask_uint64[0, 0, 0, 0]: {blockmask_uint64[0, 0, 0, 0]}")
+            # blockmask_uint64 = mx.topk_to_uint64(topk_idx, K_LEN, BLOCK_SIZE)
+            # print(f"[DEBUG] blockmask_uint64[0, 0, 0, 0]: {blockmask_uint64[0, 0, 0, 0]}")
             # out_mlx = mx.fast.infllmv2_attention_stage2(q_mlx, k_mlx, v_mlx, cu_seqlens_q_mlx, cu_seqlens_k_mlx, max_seqlen_q, max_seqlen_k, window_size_left, window_size_right, blockmask_uint64, BLOCK_WINDOW_SIZE, scale=scale, mask="causal")
             # tmp += out_mlx[0, 0, 0, 0]
             # print(f"[DEBUG] out_mlx[0, 0, 0, 0]: {out_mlx[0, 0, 0, 0]}")

@@ -3,7 +3,7 @@ echo "|Building mlx                               |"
 echo "+-------------------------------------------+"
 python setup.py build_ext --inplace
 
-# cd python/tests
+cd python/tests
 # echo "+-------------------------------------------+"
 # echo "|Running tests scaled_dot_product_attention |"
 # echo "+-------------------------------------------+"
@@ -39,10 +39,11 @@ python setup.py build_ext --inplace
 # echo "+-------------------------------------------+"
 # python test_infllmv2_attn_stage2.1.blockMask.py
 
-# echo "+-------------------------------------------+"
-# echo "|Running tests infllmv2_end2end             |"
-# echo "+-------------------------------------------+"
-# python test_infllmv2_end2end.debug.py
+echo "+-------------------------------------------+"
+echo "|Running tests infllmv2_end2end             |"
+echo "+-------------------------------------------+"
+python test_infllmv2_end2end.debug.py
+python test_infllmv2_end2end.profile.py
 
 echo "+-------------------------------------------+"
 echo "|Done!                                      |"
