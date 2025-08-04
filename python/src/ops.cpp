@@ -4658,6 +4658,31 @@ void init_ops(nb::module_& m) {
             array: The output array.
       )pbdoc");
   m.def(
+      "gather",
+      [](const mx::array& a, const mx::array& indices, int axis, const mx::Shape& slice_sizes, mx::StreamOrDevice s) {
+        return mx::gather(a, indices, axis, slice_sizes, s);
+      },
+      nb::arg(),
+      "indices"_a = nb::none(),
+      "axis"_a = 0,
+      "slice_sizes"_a = nb::none(),
+      nb::kw_only(),
+      "stream"_a = nb::none(),
+      nb::sig(
+          "def gather(a: array, indices: array, /, axis: int = 0, slice_sizes: Union[int, Tuple[int]], stream: Union[None, Stream, Device] = None) -> array"),
+      R"pbdoc(
+        Gather array entries given indices and slices
+
+        Args:
+            a (array): Input array.
+            indices (array): Integer indices for ``a``.
+            axis (int, optional): The axis to gather along. Default: ``0``.
+            slice_sizes (Sequence[int], optional): The sizes of the slices to gather. Default: ``None``.
+
+        Returns:
+            array: The output array.
+      )pbdoc");  
+  m.def(
       "diagonal",
       &mx::diagonal,
       "a"_a,

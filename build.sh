@@ -39,11 +39,16 @@ cd python/tests
 # echo "+-------------------------------------------+"
 # python test_infllmv2_attn_stage2.1.blockMask.py
 
+# echo "+-------------------------------------------+"
+# echo "|Running tests infllmv2_end2end             |"
+# echo "+-------------------------------------------+"
+# python test_infllmv2_end2end.debug.py
+# python test_infllmv2_end2end.profile.py
+
 echo "+-------------------------------------------+"
-echo "|Running tests infllmv2_end2end             |"
+echo "|Running tests gather                       |"
 echo "+-------------------------------------------+"
-python test_infllmv2_end2end.debug.py
-python test_infllmv2_end2end.profile.py
+python test_gather.py
 
 echo "+-------------------------------------------+"
 echo "|Done!                                      |"

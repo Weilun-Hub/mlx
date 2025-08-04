@@ -12,6 +12,8 @@
 #include "mlx/primitives.h"
 #include "mlx/utils.h"
 
+// #include <iostream>
+
 namespace mlx::core {
 
 constexpr int METAL_MAX_INDEX_ARRAYS = 20;
@@ -36,6 +38,8 @@ std::pair<std::string, std::string> make_index_args(
 void Gather::eval_gpu(const std::vector<array>& inputs, array& out) {
   auto& src = inputs[0];
   int nidx = inputs.size() - 1;
+
+  // std::cout << "[DEBUG ZWL] Gather::eval_gpu" << std::endl;
 
   if (nidx > METAL_MAX_INDEX_ARRAYS) {
     std::ostringstream msg;
