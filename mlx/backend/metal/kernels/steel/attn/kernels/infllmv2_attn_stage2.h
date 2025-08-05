@@ -236,6 +236,7 @@ template <
     /* int B = */ params->B, // 1
     /* int num_k_heads = */ params->num_k_heads,
     /* int uint64_per_row = */ params->uint64_per_row,
+    /* int block_window_size = */ params->block_window_size, // 2048 / 64 = 32
     /* const device uint64_t* blockmask = */ blockmask_uint64,
     /* uint simd_lane_id [[thread_index_in_simdgroup]] = */ simd_lane_id,
     /* uint simd_group_id [[simdgroup_index_in_threadgroup]] = */ simd_group_id,

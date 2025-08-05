@@ -16,6 +16,7 @@ struct BlockMaskIterator {
   const device uint64_t* blockmask_ptr;
   int max_blockmask_idx, max_k_block_idx;
   int num_k_per_blockmask, num_k_per_block, num_block_per_blockmask;
+  int blockmask_idx_left, blockmask_idx_right;
 
   METAL_FUNC BlockMaskIterator(
     const int qL,
@@ -25,6 +26,7 @@ struct BlockMaskIterator {
     const int B, // 1
     const int num_k_heads, // 2
     const int uint64_per_row, // 1
+    const int block_window_size, // 2048 / 64 = 32
     const device uint64_t* blockmask,
     uint simd_lane_id [[thread_index_in_simdgroup]],
     uint simd_group_id [[simdgroup_index_in_threadgroup]],
@@ -43,6 +45,9 @@ struct BlockMaskIterator {
       + tid.z * num_k_heads * qL * uint64_per_row 
       + tid.y * qL * uint64_per_row
       + tid.x * uint64_per_row; // offset to blockmask_ptr for current block
+
+    this->blockmask_idx_right = (kL - qL + tid.x) / num_k_per_blockmask;
+    this->blockmask_idx_left = this->blockmask_idx_right - block_window_size + 1;
   }
 
   METAL_FUNC ~BlockMaskIterator() {
@@ -69,6 +74,10 @@ struct BlockMaskIterator {
     k_block_idx = min(k_block_idx, this->max_k_block_idx - 1);
 
     int blockmask_idx = k_block_idx / this->num_block_per_blockmask; // blockmask_idx = k_block_idx / 4
+    
+    if (this->blockmask_idx_left <= blockmask_idx && blockmask_idx <= this->blockmask_idx_right) {
+      return k_block_idx;
+    }
 
     // int blockmask_uint64_idx = blockmask_idx / 64;
     int blockmask_uint64_idx = blockmask_idx >> 6;
